@@ -92,12 +92,25 @@ class TestTransformerModel(unittest.TestCase):
         self.assertEqual(generated.shape, (1, 13))
 
     def test_generation_with_eos(self):
-        # Multi-row batch prompt exercises batch-safe EOS handling without .item() scalar errors
+        # Subclass to force predicting a known token and verify EOS early stopping on multi-row batches
+        class EarlyStopModel(TinyTransformer):
+            def forward(self, token_ids: torch.Tensor, targets: torch.Tensor | None = None):
+                batch, seq_len = token_ids.shape
+                logits = torch.zeros((batch, seq_len, self.config["vocab_size"]), device=token_ids.device)
+                logits[:, :, 5] = 100.0  # Force model to predict token ID 5
+                return logits, None
+
+        model = EarlyStopModel(vocab_size=32, d_model=32, n_heads=4, n_layers=2, block_size=48)
         prompt = torch.tensor([[1, 2, 3], [4, 5, 6]])
-        generated = self.model.generate(prompt, max_new_tokens=15, eos_id=0)
-        self.assertIsInstance(generated, torch.Tensor)
-        self.assertEqual(generated.shape[0], 2)
-        self.assertGreaterEqual(generated.shape[1], 3)
+
+        # With eos_id=5, generation must stop immediately on step 1
+        stopped = model.generate(prompt, max_new_tokens=20, eos_id=5)
+        self.assertEqual(stopped.shape, (2, 4))
+        self.assertTrue((stopped[:, -1] == 5).all())
+
+        # Without eos_id, generation completes all requested tokens
+        full = model.generate(prompt, max_new_tokens=5)
+        self.assertEqual(full.shape, (2, 8))
 
 
 class TestAPIEndpoints(unittest.TestCase):
@@ -139,11 +152,18 @@ class TestAPIEndpoints(unittest.TestCase):
 
     def test_chat_long_message_handling(self):
         from fastapi.testclient import TestClient
-        from tinytalk.api import app
+        from tinytalk.api import app, format_prompt
 
         client = TestClient(app)
-        # Message longer than block_size (128) must not crash the endpoint
         long_message = "What is attention in transformer models? " * 10
+
+        # 1. Directly assert prompt formatting preserves role markers and enforces bounds
+        formatted = format_prompt(long_message, [], block_size=128)
+        self.assertTrue(formatted.startswith("User: "))
+        self.assertTrue(formatted.endswith("\nAssistant:"))
+        self.assertLessEqual(len(formatted), 128)
+
+        # 2. Assert the API endpoint processes the long message without crashing
         response = client.post("/chat", json={
             "message": long_message,
             "history": []
