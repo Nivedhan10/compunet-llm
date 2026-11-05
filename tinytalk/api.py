@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from tinytalk.dev_assistant import find_developer_response
 from tinytalk.generate import load_model
 from tinytalk.online_search import fetch_online_knowledge
 from tinytalk.rag import TinyRAG
@@ -149,7 +150,18 @@ def chat(request: ChatRequest) -> ChatResponse:
             confidence=None
         )
 
-    # 3. Local RAG grounding (Curated Dialogues + Previously Learned Knowledge)
+    # 3. Developer & Codebase Assistance Check (e.g. CRUD in Python, FastAPI, PyTorch, React)
+    dev_res = find_developer_response(msg_clean)
+    if dev_res:
+        reply_code = f"### {dev_res['title']}\n\n{dev_res['content']}\n\n[Official Documentation: {dev_res['doc_url']}]"
+        rag.add_and_save_knowledge(msg_clean, reply_code, source=dev_res["doc_url"])
+        return ChatResponse(
+            reply=reply_code,
+            source="developer_code",
+            confidence=1.0
+        )
+
+    # 4. Local RAG grounding (Curated Dialogues + Previously Learned Knowledge)
     matches = rag.retrieve(msg_clean, top_k=1, threshold=2.2)
     if matches:
         top = matches[0]

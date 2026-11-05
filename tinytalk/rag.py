@@ -117,16 +117,35 @@ class TinyRAG:
         return n
 
     def add_and_save_knowledge(self, user_q: str, assistant_ans: str, source: str = "auto_learned") -> None:
-        """Append a new knowledge record to data/knowledge.jsonl and reload indices."""
+        """Append or update a clean knowledge record in data/knowledge.jsonl and reload in-memory indices."""
         target = self.data_files[1]  # data/knowledge.jsonl
         target.parent.mkdir(exist_ok=True)
-        record = {
-            "user": user_q.strip(),
-            "assistant": assistant_ans.strip(),
-            "source": source
-        }
-        with open(target, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        user_clean = user_q.strip()
+        ans_clean = assistant_ans.strip()
+
+        existing_lines = []
+        updated = False
+        if target.exists():
+            for line in target.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    rec = json.loads(line)
+                    if rec.get("user", "").strip().lower() == user_clean.lower():
+                        rec["assistant"] = ans_clean
+                        rec["source"] = source
+                        existing_lines.append(json.dumps(rec, ensure_ascii=False))
+                        updated = True
+                    else:
+                        existing_lines.append(line)
+                except Exception:
+                    existing_lines.append(line)
+
+        if not updated:
+            new_rec = {"user": user_clean, "assistant": ans_clean, "source": source}
+            existing_lines.append(json.dumps(new_rec, ensure_ascii=False))
+
+        target.write_text("\n".join(existing_lines) + "\n", encoding="utf-8")
         self.reload()
 
     def _resolve_word(self, word: str) -> str:
@@ -163,17 +182,35 @@ class TinyRAG:
         scored = []
 
         for i, doc in enumerate(self.documents):
+            # Question relevance check:
+            # Prevents a general query like "what is python" from falsely matching
+            # a specific subtopic like "binary search in python" or "how to read a json file in python"
+            doc_u_words = set(clean_words(doc["user"])) - STOPWORDS
+            if not doc_u_words:
+                doc_u_words = set(clean_words(doc["user"]))
+
+            doc_cov = len(doc_u_words & set(q_tokens)) / max(1, len(doc_u_words))
+            if doc_cov < 0.5:
+                continue
+
             tokens = self.doc_tokens[i]
             dl = self.doc_lens[i]
             counts = Counter(tokens)
             score = 0.0
 
+            matched_terms = 0
             for t in q_counts:
                 if t in counts:
+                    matched_terms += 1
                     tf = counts[t]
                     idf = self.idf.get(t, 0.5)
                     denom = tf + self.k1 * (1.0 - self.b + self.b * (dl / max(1.0, self.avg_dl)))
                     score += idf * (tf * (self.k1 + 1.0)) / denom
+
+            # Ensure multi-word queries match a reasonable percentage of query terms
+            coverage = matched_terms / max(1, len(q_counts))
+            if len(q_counts) >= 3 and coverage < 0.35:
+                continue
 
             if score >= threshold:
                 confidence = min(1.0, max(0.5, score / 8.0))

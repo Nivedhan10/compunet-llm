@@ -41,45 +41,51 @@ def fetch_online_knowledge(query: str) -> tuple[str | None, str | None, str | No
     # Step 1: Direct summary lookup for clean topics (fastest, high quality)
     if topic_normalized and len(topic_normalized) > 2:
         try:
-            summary_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(topic_normalized)}"
+            safe_topic = urllib.parse.quote(topic_normalized, safe="()_")
+            summary_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{safe_topic}"
             req = urllib.request.Request(summary_url, headers=HEADERS)
             with urllib.request.urlopen(req, timeout=3.5) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-                if data.get("extract") and data.get("type") != "disambiguation":
+                extract = data.get("extract", "").strip()
+                if extract and data.get("type") != "disambiguation" and "may refer to" not in extract.lower():
                     title = data.get("title", topic)
-                    extract = data.get("extract", "").strip()
                     page_url = data.get("content_urls", {}).get("desktop", {}).get("page")
-                    if extract and len(extract) > 20:
-                        return title, extract, page_url or f"https://en.wikipedia.org/wiki/{topic_normalized}"
+                    if len(extract) > 20:
+                        return title, extract, page_url or f"https://en.wikipedia.org/wiki/{safe_topic}"
         except Exception:
             pass
 
-    # Step 2: Wikipedia Search API generator fallback
+    # Step 2: Wikipedia Search API in strict relevance order (Index 0 first)
     try:
         search_query = topic if topic and len(topic) > 2 else query
         url = "https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
             "action": "query",
-            "generator": "search",
-            "gsrsearch": search_query,
-            "gsrlimit": "1",
-            "prop": "extracts",
-            "exintro": "1",
-            "explaintext": "1",
-            "exsentences": "3",
-            "format": "json"
+            "list": "search",
+            "srsearch": search_query,
+            "format": "json",
+            "srlimit": 3
         })
         req = urllib.request.Request(url, headers=HEADERS)
         with urllib.request.urlopen(req, timeout=4.0) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            pages = data.get("query", {}).get("pages", {})
-            for pid, p in pages.items():
-                title = p.get("title")
-                extract = p.get("extract", "").strip()
-                if extract and len(extract) > 20:
-                    wiki_url = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(title.replace(' ', '_'))}"
-                    return title, extract, wiki_url
+            results = data.get("query", {}).get("search", [])
+            for res in results:
+                best_title = res.get("title")
+                if not best_title:
+                    continue
+                safe_title = urllib.parse.quote(best_title.replace(" ", "_"), safe="()_")
+                surl = f"https://en.wikipedia.org/api/rest_v1/page/summary/{safe_title}"
+                req2 = urllib.request.Request(surl, headers=HEADERS)
+                try:
+                    with urllib.request.urlopen(req2, timeout=3.5) as resp2:
+                        sdata = json.loads(resp2.read().decode("utf-8"))
+                        ext = sdata.get("extract", "").strip()
+                        if sdata.get("type") != "disambiguation" and "may refer to" not in ext.lower() and len(ext) > 25:
+                            page_url = sdata.get("content_urls", {}).get("desktop", {}).get("page")
+                            return best_title, ext, page_url or f"https://en.wikipedia.org/wiki/{safe_title}"
+                except Exception:
+                    continue
     except Exception:
         pass
 
     return None, None, None
-

@@ -10,6 +10,50 @@ const SUGGESTIONS = [
   'How do you work?',
 ];
 
+function FormattedContent({ text }) {
+  if (!text) return null;
+  const parts = text.split(/(```[\s\S]*?```)/g);
+  return (
+    <div className="formatted-body">
+      {parts.map((part, i) => {
+        if (part.startsWith('```') && part.endsWith('```')) {
+          const raw = part.slice(3, -3).trim();
+          const newlineIdx = raw.indexOf('\n');
+          let lang = 'code';
+          let code = raw;
+          if (newlineIdx !== -1) {
+            const firstLine = raw.slice(0, newlineIdx).trim();
+            if (/^[a-zA-Z0-9_\-#+]+$/.test(firstLine)) {
+              lang = firstLine;
+              code = raw.slice(newlineIdx + 1);
+            }
+          }
+          return (
+            <div key={i} className="code-block-wrapper">
+              <div className="code-header">
+                <span>{lang}</span>
+                <button
+                  type="button"
+                  className="copy-btn"
+                  onClick={(e) => {
+                    navigator.clipboard.writeText(code);
+                    e.currentTarget.textContent = 'Copied!';
+                    setTimeout(() => { e.currentTarget.textContent = 'Copy'; }, 1800);
+                  }}
+                >
+                  Copy
+                </button>
+              </div>
+              <pre className="code-pre"><code>{code}</code></pre>
+            </div>
+          );
+        }
+        return <p key={i}>{part}</p>;
+      })}
+    </div>
+  );
+}
+
 export default function App() {
   const [messages, setMessages] = useState(() => {
     try { return JSON.parse(localStorage.getItem('tinytalk-history')) || starter; }
@@ -105,6 +149,7 @@ export default function App() {
                 {item.role === 'assistant' && item.source && (
                   <span className={`grounding-badge ${item.source}`}>
                     {item.source === 'rag_grounded' && '⚡ Knowledge Base'}
+                    {item.source === 'developer_code' && '💻 Developer Code'}
                     {item.source === 'online_learned' && '🌐 Auto-Learned (Online)'}
                     {item.source === 'user_taught' && '🌱 User Taught'}
                     {item.source === 'needs_teaching' && '💡 Needs Teaching'}
@@ -113,7 +158,7 @@ export default function App() {
                   </span>
                 )}
               </div>
-              <p>{item.content}</p>
+              <FormattedContent text={item.content} />
             </div>
           </article>)}
           {busy && <article className="message assistant">

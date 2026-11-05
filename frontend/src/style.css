@@ -385,6 +385,64 @@ h1 em {
   border: 1px solid rgba(168, 85, 247, 0.28);
 }
 
+.grounding-badge.developer_code {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+
+.code-block-wrapper {
+  margin: 14px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0b0f14;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font: 11px 'DM Mono', monospace;
+  color: #92a29f;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.copy-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #c4cecc;
+  border-radius: 4px;
+  padding: 3px 9px;
+  font: 10.5px 'DM Mono', monospace;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.copy-btn:hover {
+  background: rgba(192, 239, 130, 0.15);
+  color: #c0ef82;
+  border-color: #c0ef82;
+}
+
+.code-pre {
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font: 13.5px 'DM Mono', Consolas, monospace;
+  line-height: 1.6;
+  color: #e5e8e4;
+  white-space: pre;
+}
+
+.code-pre code {
+  font-family: inherit;
+}
+
 .user .speaker {
   color: #798b89;
 }
