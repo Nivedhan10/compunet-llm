@@ -1,0 +1,287 @@
+User: Why do we need position embeddings?
+Assistant: Attention alone does not tell the model which character came first. Position embeddings add information about each character's location in the context.
+
+User: What does next-token prediction mean?
+Assistant: It means the model reads a sequence and estimates a probability for each possible next token. Repeating that step creates text.
+
+User: What is learning rate?
+Assistant: The learning rate controls the step size taken along the negative gradient direction during parameter updates.
+
+User: What is a residual stream?
+Assistant: The residual stream is the central highway through the Transformer where each layer reads inputs and adds its transformed updates.
+
+User: Why can a small model repeat itself?
+Assistant: A small model trained on a small corpus has limited examples and capacity. Repetition is a common limitation of this simple sampling setup.
+
+User: What is teacher forcing?
+Assistant: Teacher forcing feeds the ground truth previous tokens as input during training rather than the model's own sampled predictions.
+
+User: What is an optimizer?
+Assistant: An optimizer uses gradients from the loss to update model parameters. This project uses AdamW, which combines adaptive updates with weight decay.
+
+User: Hello
+Assistant: Hello! I am TinyTalk, a character-level Transformer built and trained from scratch.
+
+User: What should I say about limitations?
+Assistant: Explain that a tiny character model has limited data and capacity, can be slow, and is meant to teach the mechanics rather than compete with modern assistants.
+
+User: Why build vocabulary only from training data?
+Assistant: Using only training characters avoids using held-out data to define the model's input representation. An unseen validation character is handled with a fallback token.
+
+User: Why divide attention scores by the square root of head dimension?
+Assistant: In high dimensions, dot products can grow very large, causing softmax gradients to become extremely small. Scaling keeps values in a well-behaved range.
+
+User: Can I run this on a CPU?
+Assistant: Yes. The training and inference code choose CUDA when it is available and otherwise run on the CPU. CPU training can take longer.
+
+User: How does causal masking work?
+Assistant: A causal mask fills upper triangular attention scores with negative infinity. Softmax turns those into zeros so future tokens receive no attention.
+
+User: Why use a small dataset?
+Assistant: A small original dataset keeps this assessment reproducible and inspectable. It is enough to demonstrate the pipeline but not enough for broad knowledge.
+
+User: What is an attention head?
+Assistant: An attention head is an independent subspace where queries, keys, and values are compared. Multiple heads allow the model to focus on different types of relations.
+
+User: What happens if there is no checkpoint?
+Assistant: The API responds with a clear service unavailable error that tells you to run the training command first.
+
+User: What is the difference between Pre-LN and Post-LN?
+Assistant: Post-LN applies normalization after the residual sum, which can destabilize deep models. Pre-LN normalizes before the sublayer, leading to more stable training.
+
+User: What can you do?
+Assistant: I can explain neural network concepts like attention, embeddings, loss calculation, and Transformer blocks using my training data.
+
+User: What is AdamW?
+Assistant: AdamW is an adaptive gradient optimizer that decouples weight decay from gradient updates, improving regularization compared to standard Adam.
+
+User: What is backpropagation?
+Assistant: Backpropagation computes how each parameter contributed to the loss by applying the chain rule from the output back through the network.
+
+User: What are queries?
+Assistant: Queries are representations of what each token position is searching for in other positions.
+
+User: What are values?
+Assistant: Values are the actual contents or information from each token position that get aggregated according to attention weights.
+
+User: What does a checkpoint contain?
+Assistant: A checkpoint stores the learned model weights and configuration, plus the vocabulary needed to turn text into IDs and IDs back into text.
+
+User: What is a good way to explain the model?
+Assistant: Start with integer character IDs, add token and position embeddings, pass them through masked attention blocks, then predict the next character with a linear layer.
+
+User: Can this model run on GPU?
+Assistant: Yes. The code detects CUDA automatically and places tensors and model weights on the GPU when available, otherwise falling back to CPU.
+
+User: Why use multiple Transformer layers?
+Assistant: Stacking layers allows the model to learn increasingly abstract representations of text, from local character patterns to higher-level structure.
+
+User: What is temperature in generation?
+Assistant: Temperature adjusts how concentrated the next-character probabilities are. Lower values are more predictable, while higher values add variety.
+
+User: What is an embedding?
+Assistant: An embedding is a learned vector for each token ID. Similar usage patterns can become similar vectors during training.
+
+User: How do you work?
+Assistant: I take your input characters, convert them to embeddings, process them through self-attention layers, and predict the next characters one by one.
+
+User: How does temperature affect text generation?
+Assistant: Lower temperature values sharpen probabilities toward the most likely token, while higher values flatten the distribution to make output more creative.
+
+User: How is the training target made?
+Assistant: For each text window, the input contains characters zero through n minus one and the target contains the same sequence shifted one character to the left.
+
+User: What is the purpose of preprocessing?
+Assistant: Preprocessing checks the records, normalizes whitespace, removes invalid empty examples, and creates a deterministic split before building the vocabulary.
+
+User: Can TinyTalk answer general knowledge questions?
+Assistant: TinyTalk is an educational demo trained only on this small corpus, so it can only answer questions related to its training domain.
+
+User: Why is there a validation loss?
+Assistant: Validation loss measures next-character prediction on data excluded from gradient updates. Comparing it with training loss gives a basic generalization check.
+
+User: What is a token?
+Assistant: A token is a unit of text processed by a model. It can be a word, part of a word, or, in this project, a single character.
+
+User: What is vanishing gradient problem?
+Assistant: Vanishing gradients occur when backpropagated gradients shrink exponentially through deep layers, which residual connections solve by providing direct paths.
+
+User: What is Byte Pair Encoding?
+Assistant: Byte Pair Encoding is a subword tokenization method that iteratively merges the most frequent pairs of characters into single tokens.
+
+User: What is the difference between word and character tokenization?
+Assistant: Word tokenization creates large vocabularies and struggles with rare words, while character tokenization is compact and handles any spelling at the cost of longer sequences.
+
+User: How do I start the API?
+Assistant: Activate the Python environment, install the requirements, train the model, then run uvicorn tinytalk.api:app with reload enabled.
+
+User: What is softmax?
+Assistant: Softmax converts a list of scores into positive values that sum to one, so they can be treated as probabilities.
+
+User: How do I start the frontend?
+Assistant: Open another terminal, change into the frontend directory, install npm dependencies, and run the Vite development server.
+
+User: Why is attention scaled?
+Assistant: The dot product of large vectors can become large and make softmax overly sharp. Dividing by the square root of the key size keeps the scores in a useful range.
+
+User: What is an out of vocabulary token?
+Assistant: An out of vocabulary token, often denoted unk, represents an unseen character or word that was not present in the training vocabulary.
+
+User: What is a residual connection?
+Assistant: A residual connection adds a layer's input to its output. This gives information and gradients a shorter path through a deep network.
+
+User: What is Pre-LayerNorm?
+Assistant: Pre-LayerNorm applies normalization to layer inputs before attention and feed-forward operations, keeping the residual pathway clear for smooth gradient flow.
+
+User: How does the tokenizer work?
+Assistant: This tokenizer collects the unique characters in the training text, sorts them, and creates matching encode and decode tables.
+
+User: What is a context window?
+Assistant: The context window is the maximum number of characters the model can use at once. Older prompt text is trimmed when it exceeds this limit.
+
+User: What does from scratch mean?
+Assistant: It means the model weights start from random values and learn only from this project's training data, without imported pretrained weights.
+
+User: What is a decoder-only Transformer?
+Assistant: A decoder-only Transformer uses causal self attention so each position can use earlier context but not future tokens. That makes it suitable for text generation.
+
+User: What is a Transformer block?
+Assistant: A Transformer block applies masked self attention and then a feed-forward network, with residual connections and normalization to help learning.
+
+User: How can I evaluate a generated answer?
+Assistant: Inspect examples for relevance and readability, and report validation loss as a limited quantitative measure. A small held-out set cannot establish broad quality.
+
+User: What is fine tuning?
+Assistant: Fine tuning adapts an already trained model on specialized data or tasks with a smaller learning rate.
+
+User: How do you run the chatbot?
+Assistant: Start the backend with uvicorn tinytalk.api:app and start the frontend with npm run dev in the frontend directory.
+
+User: What is the purpose of this project?
+Assistant: This project demonstrates the complete end-to-end engineering of a Transformer language model, API backend, and chat frontend from scratch.
+
+User: What is the difference between an encoder and a decoder?
+Assistant: An encoder processes the entire input bidirectionally, whereas a causal decoder restricts attention to preceding positions to generate text left to right.
+
+User: Why split training and validation data?
+Assistant: Training data updates the weights. Validation data checks performance on held-out examples and helps reveal overfitting.
+
+User: What does model eval do in PyTorch?
+Assistant: Model eval disables dropout and switches layers into evaluation mode for deterministic and reliable inference.
+
+User: How do I keep answers in character?
+Assistant: The prompt uses User and Assistant labels learned from the dialogue corpus. Generation stops when it predicts a new User label or reaches its token limit.
+
+User: What are tensors in PyTorch?
+Assistant: Tensors are multi-dimensional arrays optimized for hardware acceleration and automatic differentiation via PyTorch autograd.
+
+User: What is overfitting?
+Assistant: Overfitting happens when a model memorizes training examples but performs worse on new examples. A validation split helps us notice it.
+
+User: What is a language model?
+Assistant: A language model learns patterns in text and uses them to predict what token is likely to come next.
+
+User: What is sequence length?
+Assistant: Sequence length is the number of tokens or characters in an input window. In TinyTalk, block_size defines the maximum sequence length.
+
+User: What is the purpose of the validation split?
+Assistant: The validation split evaluates the model on held-out text not used for weight updates to detect memorization and overfitting.
+
+User: What is weight tying?
+Assistant: Weight tying shares the parameters between the token embedding matrix and the final linear projection layer. This reduces parameters and helps generalization.
+
+User: What does cross entropy measure?
+Assistant: Cross entropy measures the distance between the model's predicted probability distribution and the true next character.
+
+User: Hi
+Assistant: Hi there! Feel free to ask me about Transformers, attention mechanisms, or how I was trained.
+
+User: What makes a Transformer causal?
+Assistant: A Transformer is causal when an upper triangular attention mask prevents any token from attending to future positions in the sequence.
+
+User: What is nucleus sampling?
+Assistant: Nucleus or top p sampling selects from the smallest set of tokens whose cumulative probability exceeds threshold p, balancing diversity and quality.
+
+User: What is batch size?
+Assistant: Batch size is the number of independent sequence windows processed simultaneously in a single forward and backward pass.
+
+User: Why does generation stop at User?
+Assistant: Because the training data alternates between User and Assistant turns, predicting User signals that the assistant has finished its reply.
+
+User: What is top k sampling?
+Assistant: Top k sampling keeps only the k most likely next tokens before sampling. It reduces unlikely choices while preserving some variation.
+
+User: What is the language model head?
+Assistant: The language model head is a final linear projection that maps normalized Transformer hidden states back to vocabulary logit scores.
+
+User: What is dropout and how does it prevent overfitting?
+Assistant: Dropout randomly sets a fraction of activations to zero during training, preventing neurons from co-adapting and memorizing the training set.
+
+User: What is gradient clipping?
+Assistant: Gradient clipping caps the maximum norm of parameter gradients during backpropagation to prevent destabilizing updates from exploding gradients.
+
+User: What are keys?
+Assistant: Keys represent the features of earlier positions that are matched against queries to compute attention weights.
+
+User: Where is conversation history stored?
+Assistant: The current demo keeps recent messages in React state in the browser. The backend receives that history with each request and does not store it.
+
+User: What does FastAPI do in this project?
+Assistant: FastAPI exposes a web endpoint that accepts a message and recent conversation history, builds a prompt, and returns generated text.
+
+User: How does scaled dot product attention work?
+Assistant: It multiplies queries by keys, scales by the square root of key dimension, applies a causal mask, computes softmax, and multiplies by values.
+
+User: What is the role of the residual connection?
+Assistant: Residual connections add the block input to its output, allowing gradients to flow directly during backpropagation and stabilizing training.
+
+User: What is a vocabulary?
+Assistant: A vocabulary maps each allowed token to a unique integer ID. The neural network works with those IDs rather than raw text.
+
+User: Who are you?
+Assistant: I am TinyTalk, an educational language model created to demonstrate how neural text generation works from first principles.
+
+User: What is a token ID?
+Assistant: A token ID is a unique integer assigned to each token in the vocabulary so numerical tensors can represent text.
+
+User: What is a causal mask?
+Assistant: It sets attention scores for future positions to negative infinity before softmax. That makes a next-token model obey the left-to-right prediction task.
+
+User: What is rotary position embedding?
+Assistant: Rotary position embedding encodes relative positions by rotating query and key vectors in the complex plane rather than adding absolute vectors.
+
+User: What is an embedding vector?
+Assistant: An embedding vector is a continuous high-dimensional representation that maps discrete tokens into a geometric space where similar tokens group together.
+
+User: What does torch no grad do?
+Assistant: Torch no grad disables gradient calculation, reducing memory consumption and speeding up computation during evaluation and generation.
+
+User: Why use multiple attention heads?
+Assistant: Multiple heads can learn different relationships at the same time, such as nearby character patterns and longer-range context.
+
+User: How is text generated from a prompt?
+Assistant: The prompt is tokenized into IDs, fed into the Transformer, and the model repeatedly predicts the next character until a limit or stop tag is reached.
+
+User: What is cross entropy loss?
+Assistant: Cross entropy measures how much probability the model assigned to the correct next character. Lower loss means better predictions on those examples.
+
+User: What does React do here?
+Assistant: React renders the chat interface, displays messages, keeps the conversation in browser state, and sends requests to the backend.
+
+User: Why not use a pretrained model?
+Assistant: The assessment asks for learning from random initialization. Training from scratch makes the tokenizer, architecture, and optimization process visible.
+
+User: How can the dataset be improved?
+Assistant: Add more original examples with varied wording and topics, keep a held-out validation set, and review the source and quality of every example.
+
+User: What is CORS?
+Assistant: Cross-Origin Resource Sharing is a browser security mechanism that restricts web applications from making requests to a different domain or port unless explicitly allowed.
+
+User: Why use characters here?
+Assistant: A character vocabulary is easy to build from a small dataset and has no unknown words. The tradeoff is that it takes many prediction steps to write a sentence.
+
+User: What does the feed-forward layer do?
+Assistant: It applies a small neural network independently at each sequence position, transforming the features produced by attention.
+
+User: How is loss calculated during training?
+Assistant: Cross-entropy loss compares the predicted probability distribution at each position against the true one-hot next token index.

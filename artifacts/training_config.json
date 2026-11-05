@@ -1,0 +1,14 @@
+{
+  "vocab_size": 60,
+  "d_model": 64,
+  "n_heads": 4,
+  "n_layers": 2,
+  "block_size": 128,
+  "dropout": 0.1,
+  "steps": 3500,
+  "final_losses": {
+    "train": 1.1713271379470824,
+    "validation": 1.8336295127868651,
+    "test": 1.6998372197151184
+  }
+}

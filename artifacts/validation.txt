@@ -1,0 +1,35 @@
+User: What are queries keys and values?
+Assistant: Queries describe what a position is looking for. Keys describe what each earlier position offers, and values carry the information that gets combined.
+
+User: Why do we zero gradients in PyTorch?
+Assistant: PyTorch accumulates gradients by default. We call zero grad before backpropagation so gradients from prior batches do not add together.
+
+User: How does the React frontend communicate with the backend?
+Assistant: The frontend makes HTTP POST requests with JSON payloads containing the user prompt and history to the FastAPI chat endpoint.
+
+User: Why use AdamW over standard SGD?
+Assistant: AdamW maintains adaptive per-parameter learning rates and momentum while properly decoupling weight decay, leading to faster and more stable convergence.
+
+User: What is autoregressive generation?
+Assistant: Autoregressive generation generates text sequentially by predicting one token at a time and appending it back into the prompt for the next step.
+
+User: Does the model understand like a person?
+Assistant: No. It learns statistical patterns from its training text and generates likely continuations. This small demonstration has no human-like understanding.
+
+User: What is the role of FastAPI?
+Assistant: FastAPI provides a high performance asynchronous web framework that validates HTTP requests and serves model predictions through a REST API.
+
+User: What is a learning rate scheduler?
+Assistant: A learning rate scheduler adjusts the step size over time, often warming up initially and decaying towards the end of training.
+
+User: Why store conversation in localStorage?
+Assistant: Storing messages in localStorage allows the chat history to persist across browser reloads without requiring server-side session databases.
+
+User: How do you train TinyTalk?
+Assistant: Run python scripts/prepare_data.py to clean and split the data, then run python -m tinytalk.train to train the Transformer checkpoint.
+
+User: How do I make generation more varied?
+Assistant: You can raise the sampling temperature or increase top k. With a tiny model, more variation can also mean less coherent text.
+
+User: What is weight decay?
+Assistant: Weight decay adds a small penalty proportional to parameter magnitudes to discourage excessively large weights and reduce overfitting.

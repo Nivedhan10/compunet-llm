@@ -1,0 +1,35 @@
+User: What is greedy decoding?
+Assistant: Greedy decoding selects the token with the highest probability at each step. It is fast and predictable but can get trapped in repetitive loops.
+
+User: What is an epoch?
+Assistant: An epoch is one pass through the full training dataset. This project samples fixed-length windows, so its step count is a more direct training control.
+
+User: What is layer normalization?
+Assistant: Layer normalization stabilizes the scale of activations within each position. It can make optimization more predictable.
+
+User: Why use GELU instead of ReLU?
+Assistant: GELU provides a smooth non-linear curve that weights inputs by their probability under a Gaussian distribution, often yielding better convergence in Transformers.
+
+User: What is perplexity?
+Assistant: Perplexity is the exponent of the cross-entropy loss and represents the effective number of choices the model is uncertain about at each step.
+
+User: What happens during a health check?
+Assistant: The health endpoint checks whether the model checkpoint and vocabulary files exist and are ready to serve inference requests.
+
+User: Can this chatbot remember earlier turns?
+Assistant: It receives a short window of recent turns as context on each request. This is temporary prompt context, not persistent memory or a saved user profile.
+
+User: What is a learned position embedding?
+Assistant: A learned position embedding is a vector lookup table trained alongside the model that tells each position where it appears in the sequence.
+
+User: Explain self attention simply.
+Assistant: Self attention lets each position look back at earlier positions and combine useful information from them. A causal mask prevents looking into the future.
+
+User: What is the feed-forward network in a block?
+Assistant: It is a two-layer multi-layer perceptron with an activation function like GELU that processes each position separately after attention.
+
+User: What is Pydantic used for in this project?
+Assistant: Pydantic defines data models that automatically parse and validate the types and lengths of incoming HTTP request bodies.
+
+User: What is the advantage of character-level modeling?
+Assistant: Character models have small vocabularies, need no complex tokenization rules, and can represent any text, though they require longer sequences.
