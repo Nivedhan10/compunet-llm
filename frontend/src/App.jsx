@@ -60,35 +60,80 @@ export default function App() {
   return <main className="shell">
     <header className="topbar">
       <a className="brand" href="#"><span className="brand-mark">T</span><span>TinyTalk <small>FROM SCRATCH</small></span></a>
-      <div className="top-actions"><span className={`status ${status}`}><i />{status === 'ready' ? 'Model ready' : status === 'needs_training' ? 'Needs training' : status === 'offline' ? 'API offline' : status === 'error' ? 'Model error' : 'Checking model'}</span><button className="clear" onClick={clearChat}>New chat</button></div>
+      <div className="top-actions">
+        <span className={`status ${status}`}>
+          <i />
+          {status === 'ready' ? 'Model ready' : status === 'needs_training' ? 'Needs training' : status === 'offline' ? 'API offline' : status === 'error' ? 'Model error' : 'Checking model'}
+        </span>
+        <button className="clear" onClick={clearChat}>New chat</button>
+      </div>
     </header>
-    <section className={`intro ${messages.length > 1 ? 'compact' : ''}`}>
-      <div className="eyebrow"><span /> EDUCATIONAL LANGUAGE MODEL</div>
-      <h1>A tiny model.<br /><em>Built from first principles.</em></h1>
-      <p>Ask about tokens, attention, or training. TinyTalk was trained from random initialization on a small, original dialogue dataset.</p>
-    </section>
-    <section className="chat" aria-label="Conversation">
-      {messages.map((item, index) => <article className={`message ${item.role}`} key={`${index}-${item.content.slice(0, 12)}`}>
-        <div className="avatar">{item.role === 'assistant' ? 'T' : 'Y'}</div>
-        <div className="bubble"><div className="speaker">{item.role === 'assistant' ? 'TINYTALK' : 'YOU'}</div><p>{item.content}</p></div>
-      </article>)}
-      {busy && <article className="message assistant"><div className="avatar">T</div><div className="bubble"><div className="speaker">TINYTALK</div><div className="typing"><i /><i /><i /></div></div></article>}
-      {error && <div className="error">{error}</div>}
-      {messages.length <= 1 && (
+
+    <div className="workspace">
+      <aside className="intro">
+        <div className="eyebrow"><span /> EDUCATIONAL LANGUAGE MODEL</div>
+        <h1>A tiny model.<br /><em>Built from first principles.</em></h1>
+        <p>Ask about tokens, attention, or training. TinyTalk was trained from random initialization on a small, original dialogue dataset.</p>
+
+        <div className="model-specs">
+          <div className="spec-item"><span className="spec-label">PARAMS</span><span className="spec-val">112K</span></div>
+          <div className="spec-item"><span className="spec-label">VOCAB</span><span className="spec-val">60</span></div>
+          <div className="spec-item"><span className="spec-label">CONTEXT</span><span className="spec-val">128</span></div>
+          <div className="spec-item"><span className="spec-label">LAYERS</span><span className="spec-val">2</span></div>
+        </div>
+
         <div className="suggestions">
-          <div className="suggestions-label">SUGGESTED QUESTIONS:</div>
+          <div className="suggestions-label">SUGGESTED QUESTIONS</div>
           <div className="chips">
             {SUGGESTIONS.map(prompt => (
               <button key={prompt} className="chip" onClick={() => sendMessage(prompt)}>
-                {prompt}
+                <span>{prompt}</span>
+                <span className="chip-arrow">→</span>
               </button>
             ))}
           </div>
         </div>
-      )}
-      <div ref={bottom} />
-    </section>
-    <form className="composer" onSubmit={send}><textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(e); } }} placeholder="Ask TinyTalk something..." maxLength={2000} rows="1" aria-label="Your message" /><button disabled={busy || !text.trim()} aria-label="Send message">↑</button><div className="hint">ENTER TO SEND <span>·</span> SHIFT + ENTER FOR NEW LINE</div></form>
-    <footer><span>PYTORCH · FASTAPI · REACT</span><span>SMALL MODEL, CLEAR MECHANICS</span></footer>
+      </aside>
+
+      <section className="chat-container">
+        <div className="chat" aria-label="Conversation">
+          {messages.map((item, index) => <article className={`message ${item.role}`} key={`${index}-${item.content.slice(0, 12)}`}>
+            <div className="avatar">{item.role === 'assistant' ? 'T' : 'Y'}</div>
+            <div className="bubble">
+              <div className="speaker">{item.role === 'assistant' ? 'TINYTALK' : 'YOU'}</div>
+              <p>{item.content}</p>
+            </div>
+          </article>)}
+          {busy && <article className="message assistant">
+            <div className="avatar">T</div>
+            <div className="bubble">
+              <div className="speaker">TINYTALK</div>
+              <div className="typing"><i /><i /><i /></div>
+            </div>
+          </article>}
+          {error && <div className="error">{error}</div>}
+          <div ref={bottom} />
+        </div>
+
+        <form className="composer" onSubmit={send}>
+          <textarea
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(e); } }}
+            placeholder="Ask TinyTalk something..."
+            maxLength={2000}
+            rows="1"
+            aria-label="Your message"
+          />
+          <button disabled={busy || !text.trim()} aria-label="Send message">↑</button>
+          <div className="hint">ENTER TO SEND <span>·</span> SHIFT + ENTER FOR NEW LINE</div>
+        </form>
+      </section>
+    </div>
+
+    <footer>
+      <span>PYTORCH · FASTAPI · REACT</span>
+      <span>SMALL MODEL, CLEAR MECHANICS</span>
+    </footer>
   </main>;
 }
