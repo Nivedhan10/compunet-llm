@@ -92,10 +92,11 @@ class TestTransformerModel(unittest.TestCase):
         self.assertEqual(generated.shape, (1, 13))
 
     def test_generation_with_eos(self):
-        prompt = torch.tensor([[1, 2, 3]])
-        # Passing an eos_id must run safely and return a valid token tensor
+        # Multi-row batch prompt exercises batch-safe EOS handling without .item() scalar errors
+        prompt = torch.tensor([[1, 2, 3], [4, 5, 6]])
         generated = self.model.generate(prompt, max_new_tokens=15, eos_id=0)
         self.assertIsInstance(generated, torch.Tensor)
+        self.assertEqual(generated.shape[0], 2)
         self.assertGreaterEqual(generated.shape[1], 3)
 
 

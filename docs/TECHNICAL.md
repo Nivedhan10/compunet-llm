@@ -79,7 +79,7 @@ python -m tinytalk.train --steps 3500 --block-size 128
 uvicorn tinytalk.api:app --reload
 ```
 
-In another terminal, run `cd frontend`, `npm install`, and `npm run dev`. Open the local Vite address. CUDA is selected when available; otherwise CPU is used. CPU training may be slow.
+In another terminal, run `cd frontend`, `npm install`, and `npm run dev`. Open the local Vite address. CUDA is selected when available; otherwise CPU is used (CPU training takes approximately 3-4 minutes).
 
 To see a text-only sample, use `python -m tinytalk.generate --prompt "User: What is attention?\nAssistant:"`. Run training with fewer steps for a quick pipeline run. Increase steps or enrich the original dataset for more stable demonstrations. Since training data is tiny, a lower validation loss only indicates better character prediction on this particular held-out sample; it does not establish general language ability.
 
