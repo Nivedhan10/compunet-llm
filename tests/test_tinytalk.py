@@ -91,6 +91,13 @@ class TestTransformerModel(unittest.TestCase):
         generated = self.model.generate(prompt, max_new_tokens=10, temperature=0.7, top_k=4)
         self.assertEqual(generated.shape, (1, 13))
 
+    def test_generation_with_eos(self):
+        prompt = torch.tensor([[1, 2, 3]])
+        # Passing an eos_id must run safely and return a valid token tensor
+        generated = self.model.generate(prompt, max_new_tokens=15, eos_id=0)
+        self.assertIsInstance(generated, torch.Tensor)
+        self.assertGreaterEqual(generated.shape[1], 3)
+
 
 class TestAPIEndpoints(unittest.TestCase):
     def test_health_check(self):
@@ -100,7 +107,7 @@ class TestAPIEndpoints(unittest.TestCase):
         client = TestClient(app)
         response = client.get("/health")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(response.json().get("status"), ["ready", "needs_training"])
+        self.assertEqual(response.json().get("status"), "ready")
 
     def test_chat_schema_validation(self):
         from fastapi.testclient import TestClient

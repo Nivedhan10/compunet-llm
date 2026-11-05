@@ -45,32 +45,32 @@ The feed-forward network is a two-layer GELU network. After the final normalizat
 
 Training samples fixed-length windows from the training character stream. The input is the window and the target is shifted by one character, teaching next-character prediction. Cross entropy compares each position's vocabulary scores with its correct next character. AdamW updates parameters using gradients from backpropagation; gradient clipping limits unusually large updates.
 
-At intervals, the script estimates average loss on random training and held-out validation windows. Periodic evaluation is strictly restricted to training and validation splits to prevent data leakage. At the end of training, the model is evaluated once on the untouched held-out test split. The checkpoint stores the model state and architecture configuration; `vocab.json` stores the matching tokenizer. Both are needed to use the checkpoint. Generation repeatedly predicts the next character, samples from the top-k candidates after temperature scaling, and appends the result. The API stops the visible answer when a new `User:` turn begins.
+At intervals, the script estimates average loss on random training and held-out validation windows. Periodic evaluation is strictly restricted to training and validation splits to prevent data leakage. At the end of training, the model is evaluated once on the untouched held-out test split. Note that the reported validation and test losses are sampled window estimates (averaging 20 random windows from each split) rather than an exhaustive single-pass metric. The checkpoint stores the model state and architecture configuration; `vocab.json` stores the matching tokenizer. Both are needed to use the checkpoint. Generation repeatedly predicts the next character, samples from top-k candidates after temperature scaling, and appends the result. The API stops the visible answer when a new `User:` turn begins.
 
 ## API and frontend
 
-`GET /health` reports whether both the checkpoint and vocabulary files exist and are ready for inference. `POST /chat` accepts a message plus conversation history. To maintain optimal generation quality within the 128-token context window, the API dynamically budgets history to prioritize the active question. If an individual prompt exceeds 128 characters, the most recent characters that fit within the context window are processed. The request schema limits text sizes and validates roles. CORS permits the local Vite development origin. If training has not produced a checkpoint, `/chat` returns HTTP 503 with the training command.
+`GET /health` reports whether both the checkpoint and vocabulary files exist and can be loaded successfully for inference. `POST /chat` accepts a message plus conversation history. To maintain optimal generation quality within the 128-token context window, the API dynamically budgets history to prioritize the active question. If an individual prompt exceeds the context window, the message body is trimmed while preserving the structural `User: ` and `\nAssistant:` role delimiters. The request schema limits text sizes and validates roles. CORS permits the local Vite development origin. If training has not produced a checkpoint, `/chat` returns HTTP 503 with the training command.
 
 React renders the transcript, loading state, error banner, and quick suggested question chips. It submits on Enter and inserts a newline on Shift+Enter. It keeps recent conversation state in `localStorage`, so refreshing the page preserves the browser's transcript. No messages are sent anywhere except the local FastAPI service.
 
 ## Automated Verification
 
-An automated test suite under `tests/test_tinytalk.py` verifies:
+An automated test suite under `tests/test_tinytalk.py` contains 12 unit and integration tests verifying:
 1. Tokenizer encode/decode roundtrip and `<unk>` character handling.
 2. Tokenizer serialization and deserialization.
 3. Transformer output tensor shapes and cross-entropy loss computation.
 4. Parameter tying between language head and token embeddings.
 5. Strict causality property (future tokens cannot alter past token logits).
 6. Generation output sequence dimensions.
-7. Batch-invariant EOS generation handling.
-8. FastAPI health check (validating model checkpoint and vocabulary presence).
+7. Safe execution of generation with optional `eos_id`.
+8. FastAPI health check (validating model checkpoint and vocabulary loading).
 9. FastAPI input schema validation and error handling.
 10. End-to-end chat inference and response generation.
-11. Safe truncation of inputs that exceed the context window.
+11. Safe truncation of inputs that exceed the context window while preserving role markers.
 
 ## Install and run
 
-Use Python 3.10 or newer. Install PyTorch appropriate to your machine using the official PyTorch selector, followed by `python -m pip install -r requirements.txt`. Then run:
+Use Python 3.10 or newer. Install PyTorch 2.0 or newer (required for `F.scaled_dot_product_attention`) using the official PyTorch selector, followed by `python -m pip install -r requirements.txt`. Then run:
 
 ```powershell
 python scripts/prepare_data.py

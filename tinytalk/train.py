@@ -67,11 +67,16 @@ def main() -> None:
     val_ids = torch.tensor(tokenizer.encode(val_path.read_text(encoding="utf-8")), dtype=torch.long)
     test_ids = torch.tensor(tokenizer.encode(test_path.read_text(encoding="utf-8")), dtype=torch.long) if test_path.exists() else None
 
-    # Periodic evaluation uses only train and validation to maintain test set integrity
-    eval_datasets = {"train": train_ids, "validation": val_ids}
-    for name, tensor in eval_datasets.items():
+    # Verify all splits meet minimum length requirement before starting training
+    all_datasets = {"train": train_ids, "validation": val_ids}
+    if test_ids is not None:
+        all_datasets["test"] = test_ids
+    for name, tensor in all_datasets.items():
         if len(tensor) <= args.block_size + 1:
             raise SystemExit(f"Dataset split '{name}' ({len(tensor)} tokens) is too short for block size {args.block_size}; reduce --block-size")
+
+    # Periodic evaluation uses only train and validation to maintain test set integrity
+    eval_datasets = {"train": train_ids, "validation": val_ids}
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = TinyTransformer(tokenizer.vocab_size, args.d_model, args.heads, args.layers, args.block_size).to(device)
