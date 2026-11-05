@@ -24,7 +24,7 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python scripts/prepare_data.py
-python -m tinytalk.train --steps 2500
+python -m tinytalk.train --steps 3500 --block-size 128
 uvicorn tinytalk.api:app --reload
 ```
 

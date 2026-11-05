@@ -94,6 +94,6 @@ class TinyTransformer(nn.Module):
             probabilities = F.softmax(next_logits, dim=-1)
             next_id = torch.multinomial(probabilities, num_samples=1)
             token_ids = torch.cat((token_ids, next_id), dim=1)
-            if eos_id is not None and next_id.item() == eos_id:
+            if eos_id is not None and (next_id == eos_id).all():
                 break
         return token_ids

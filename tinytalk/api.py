@@ -39,8 +39,10 @@ def model_bundle():
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    ready = (Path(__file__).resolve().parents[1] / "artifacts" / "tinytalk.pt").exists()
-    return {"status": "ready" if ready else "needs_training"}
+    root = Path(__file__).resolve().parents[1]
+    has_model = (root / "artifacts" / "tinytalk.pt").exists()
+    has_vocab = (root / "artifacts" / "vocab.json").exists()
+    return {"status": "ready" if (has_model and has_vocab) else "needs_training"}
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -52,22 +54,26 @@ def chat(request: ChatRequest) -> ChatResponse:
 
     current_turn = f"User: {request.message.strip()}\nAssistant:"
     block_size = model.config.get("block_size", 128)
-    # Reserve room for the current question while including as much recent history as fits
-    history_budget = max(40, block_size - len(current_turn) - 15)
 
-    prompt_turns = []
-    accumulated_len = 0
-    for turn in reversed(request.history):
-        role_label = "User" if turn.role == "user" else "Assistant"
-        line = f"{role_label}: {turn.content.strip()}"
-        if accumulated_len + len(line) + 1 <= history_budget:
-            prompt_turns.insert(0, line)
-            accumulated_len += len(line) + 1
-        else:
-            break
+    # If the user prompt exceeds the entire context window, take the most recent characters
+    if len(current_turn) > block_size:
+        prompt = current_turn[-block_size:]
+    else:
+        # Reserve room for the current question while including as much recent history as fits
+        history_budget = max(0, block_size - len(current_turn) - 15)
+        prompt_turns = []
+        accumulated_len = 0
+        for turn in reversed(request.history):
+            role_label = "User" if turn.role == "user" else "Assistant"
+            line = f"{role_label}: {turn.content.strip()}"
+            if accumulated_len + len(line) + 1 <= history_budget:
+                prompt_turns.insert(0, line)
+                accumulated_len += len(line) + 1
+            else:
+                break
 
-    prompt_turns.append(current_turn)
-    prompt = "\n".join(prompt_turns)
+        prompt_turns.append(current_turn)
+        prompt = "\n".join(prompt_turns)
 
     device = next(model.parameters()).device
     ids = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long, device=device)

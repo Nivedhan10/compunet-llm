@@ -114,6 +114,35 @@ class TestAPIEndpoints(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 422)
 
+    def test_chat_end_to_end_generation(self):
+        from fastapi.testclient import TestClient
+        from tinytalk.api import app
+
+        client = TestClient(app)
+        response = client.post("/chat", json={
+            "message": "What is attention?",
+            "history": [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello!"}]
+        })
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("reply", data)
+        self.assertIsInstance(data["reply"], str)
+        self.assertGreater(len(data["reply"]), 0)
+
+    def test_chat_long_message_handling(self):
+        from fastapi.testclient import TestClient
+        from tinytalk.api import app
+
+        client = TestClient(app)
+        # Message longer than block_size (128) must not crash the endpoint
+        long_message = "What is attention in transformer models? " * 10
+        response = client.post("/chat", json={
+            "message": long_message,
+            "history": []
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("reply", response.json())
+
 
 if __name__ == "__main__":
     unittest.main()

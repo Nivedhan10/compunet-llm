@@ -32,7 +32,7 @@ def estimate_loss(model: TinyTransformer, datasets: dict[str, torch.Tensor],
 
 
 def get_batch(data: torch.Tensor, block_size: int, batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
-    starts = torch.randint(len(data) - block_size - 1, (batch_size,))
+    starts = torch.randint(0, len(data) - block_size, (batch_size,))
     x = torch.stack([data[start:start + block_size] for start in starts])
     y = torch.stack([data[start + 1:start + block_size + 1] for start in starts])
     return x.to(device), y.to(device)
@@ -40,7 +40,7 @@ def get_batch(data: torch.Tensor, block_size: int, batch_size: int, device: torc
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--steps", type=int, default=2500)
+    parser.add_argument("--steps", type=int, default=3500)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--block-size", type=int, default=128)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
@@ -65,11 +65,11 @@ def main() -> None:
     tokenizer = CharTokenizer.load(vocab_path)
     train_ids = torch.tensor(tokenizer.encode(train_path.read_text(encoding="utf-8")), dtype=torch.long)
     val_ids = torch.tensor(tokenizer.encode(val_path.read_text(encoding="utf-8")), dtype=torch.long)
-    datasets = {"train": train_ids, "validation": val_ids}
-    if test_path.exists():
-        datasets["test"] = torch.tensor(tokenizer.encode(test_path.read_text(encoding="utf-8")), dtype=torch.long)
+    test_ids = torch.tensor(tokenizer.encode(test_path.read_text(encoding="utf-8")), dtype=torch.long) if test_path.exists() else None
 
-    for name, tensor in datasets.items():
+    # Periodic evaluation uses only train and validation to maintain test set integrity
+    eval_datasets = {"train": train_ids, "validation": val_ids}
+    for name, tensor in eval_datasets.items():
         if len(tensor) <= args.block_size + 1:
             raise SystemExit(f"Dataset split '{name}' ({len(tensor)} tokens) is too short for block size {args.block_size}; reduce --block-size")
 
@@ -80,7 +80,7 @@ def main() -> None:
     
     for step in range(1, args.steps + 1):
         if step == 1 or step % args.eval_every == 0 or step == args.steps:
-            losses = estimate_loss(model, datasets, args.block_size, args.batch_size, device)
+            losses = estimate_loss(model, eval_datasets, args.block_size, args.batch_size, device)
             loss_str = " | ".join(f"{name} loss {val:.4f}" for name, val in losses.items())
             print(f"step {step:5d} | {loss_str}")
         x, y = get_batch(train_ids, args.block_size, args.batch_size, device)
@@ -94,11 +94,16 @@ def main() -> None:
     artifacts.mkdir(exist_ok=True)
     checkpoint = {"model_state": model.state_dict(), "config": model.config, "seed": 1337}
     torch.save(checkpoint, artifacts / "tinytalk.pt")
-    final_losses = estimate_loss(model, datasets, args.block_size, args.batch_size, device, batches=20)
+
+    # Evaluate final model on train, validation, and untouched held-out test data
+    final_eval_sets = {"train": train_ids, "validation": val_ids}
+    if test_ids is not None:
+        final_eval_sets["test"] = test_ids
+    final_losses = estimate_loss(model, final_eval_sets, args.block_size, args.batch_size, device, batches=20)
     (artifacts / "training_config.json").write_text(
         json.dumps({**model.config, "steps": args.steps, "final_losses": final_losses}, indent=2), encoding="utf-8"
     )
-    print(f"Final evaluation: {final_losses}")
+    print(f"Final evaluation on untouched test set: {final_losses}")
     print(f"Saved checkpoint to {artifacts / 'tinytalk.pt'}")
 
 
