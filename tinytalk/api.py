@@ -29,6 +29,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     history: list[ChatMessage] = Field(default_factory=list, max_length=20)
+    max_new_tokens: int | None = Field(default=None, ge=1, le=160)
 
 
 class ChatResponse(BaseModel):
@@ -96,8 +97,9 @@ def chat(request: ChatRequest) -> ChatResponse:
     device = next(model.parameters()).device
     ids = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long, device=device)
     stop_seqs = [tokenizer.encode("\nUser:"), tokenizer.encode("\n\nUser:")]
+    max_tokens = request.max_new_tokens or 64
     with torch.inference_mode():
-        output = model.generate(ids, max_new_tokens=120, temperature=0.6, top_k=6, stop_sequences=stop_seqs)[0].tolist()
+        output = model.generate(ids, max_new_tokens=max_tokens, temperature=0.6, top_k=6, stop_sequences=stop_seqs)[0].tolist()
     reply = tokenizer.decode(output[len(ids[0]):]).split("\nUser:", 1)[0].split("\n\nUser:", 1)[0].strip()
     if not reply:
         reply = "I am a small Transformer learning from scratch. Try asking about attention, embeddings, or training!"

@@ -142,7 +142,8 @@ class TestAPIEndpoints(unittest.TestCase):
         client = TestClient(app)
         response = client.post("/chat", json={
             "message": "What is attention?",
-            "history": [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello!"}]
+            "history": [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello!"}],
+            "max_new_tokens": 10
         })
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -166,7 +167,8 @@ class TestAPIEndpoints(unittest.TestCase):
         # 2. Assert the API endpoint processes the long message without crashing
         response = client.post("/chat", json={
             "message": long_message,
-            "history": []
+            "history": [],
+            "max_new_tokens": 10
         })
         self.assertEqual(response.status_code, 200)
         self.assertIn("reply", response.json())
