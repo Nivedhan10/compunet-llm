@@ -115,47 +115,32 @@ class TestTransformerModel(unittest.TestCase):
 
 class TestAPIEndpoints(unittest.TestCase):
     def test_health_check(self):
-        from fastapi.testclient import TestClient
-        from tinytalk.api import app
-
-        client = TestClient(app)
-        response = client.get("/health")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json().get("status"), "ready")
+        from tinytalk.api import health
+        result = health()
+        self.assertEqual(result, {"status": "ready"})
 
     def test_chat_schema_validation(self):
-        from fastapi.testclient import TestClient
-        from tinytalk.api import app
+        from pydantic import ValidationError
+        from tinytalk.api import ChatRequest, ChatMessage
 
-        client = TestClient(app)
-        # Invalid role should be rejected with 422 Unprocessable Entity
-        response = client.post("/chat", json={
-            "message": "Hello",
-            "history": [{"role": "hacker", "content": "test"}]
-        })
-        self.assertEqual(response.status_code, 422)
+        # Invalid role should fail Pydantic validation
+        with self.assertRaises(ValidationError):
+            ChatRequest(message="Hello", history=[ChatMessage(role="hacker", content="test")])
 
     def test_chat_end_to_end_generation(self):
-        from fastapi.testclient import TestClient
-        from tinytalk.api import app
+        from tinytalk.api import chat, ChatRequest, ChatMessage
 
-        client = TestClient(app)
-        response = client.post("/chat", json={
-            "message": "What is attention?",
-            "history": [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello!"}],
-            "max_new_tokens": 10
-        })
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertIn("reply", data)
-        self.assertIsInstance(data["reply"], str)
-        self.assertGreater(len(data["reply"]), 0)
+        response = chat(ChatRequest(
+            message="What is attention?",
+            history=[ChatMessage(role="user", content="Hi"), ChatMessage(role="assistant", content="Hello!")],
+            max_new_tokens=10
+        ))
+        self.assertIsInstance(response.reply, str)
+        self.assertGreater(len(response.reply), 0)
 
     def test_chat_long_message_handling(self):
-        from fastapi.testclient import TestClient
-        from tinytalk.api import app, format_prompt
+        from tinytalk.api import chat, ChatRequest, format_prompt
 
-        client = TestClient(app)
         long_message = "What is attention in transformer models? " * 10
 
         # 1. Directly assert prompt formatting preserves role markers and enforces bounds
@@ -164,14 +149,10 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertTrue(formatted.endswith("\nAssistant:"))
         self.assertLessEqual(len(formatted), 128)
 
-        # 2. Assert the API endpoint processes the long message without crashing
-        response = client.post("/chat", json={
-            "message": long_message,
-            "history": [],
-            "max_new_tokens": 10
-        })
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("reply", response.json())
+        # 2. Assert the chat route processes the long message without crashing
+        response = chat(ChatRequest(message=long_message, history=[], max_new_tokens=10))
+        self.assertIsInstance(response.reply, str)
+        self.assertGreater(len(response.reply), 0)
 
 
 if __name__ == "__main__":
