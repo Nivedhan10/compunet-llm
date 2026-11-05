@@ -340,6 +340,49 @@ h1 em {
   letter-spacing: 1.4px;
   margin: 0 0 6px;
   color: #92a29f;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.grounding-badge {
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: none;
+}
+
+.grounding-badge.rag_grounded {
+  background: rgba(192, 239, 130, 0.12);
+  color: #c0ef82;
+  border: 1px solid rgba(192, 239, 130, 0.28);
+}
+
+.grounding-badge.generator {
+  background: rgba(146, 162, 159, 0.12);
+  color: #c4cecc;
+  border: 1px solid rgba(146, 162, 159, 0.25);
+}
+
+.grounding-badge.online_learned {
+  background: rgba(94, 186, 255, 0.12);
+  color: #5ebaff;
+  border: 1px solid rgba(94, 186, 255, 0.28);
+}
+
+.grounding-badge.user_taught {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+}
+
+.grounding-badge.needs_teaching {
+  background: rgba(168, 85, 247, 0.12);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.28);
 }
 
 .user .speaker {

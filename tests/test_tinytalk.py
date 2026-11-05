@@ -155,5 +155,21 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertGreater(len(response.reply), 0)
 
 
+class TestTinyRAG(unittest.TestCase):
+    def setUp(self):
+        from tinytalk.rag import TinyRAG
+        self.rag = TinyRAG()
+
+    def test_rag_exact_match(self):
+        matches = self.rag.retrieve("How do you work?", top_k=1)
+        self.assertTrue(len(matches) > 0)
+        self.assertEqual(matches[0].matched_prompt, "How do you work?")
+        self.assertIn("embeddings", matches[0].answer)
+
+    def test_rag_low_score_for_unrelated_query(self):
+        matches = self.rag.retrieve("What is the recipe for chocolate cake?", top_k=1, threshold=2.2)
+        self.assertEqual(len(matches), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

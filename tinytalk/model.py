@@ -82,13 +82,21 @@ class TinyTransformer(nn.Module):
 
     @torch.no_grad()
     def generate(self, token_ids: torch.Tensor, max_new_tokens: int = 120, temperature: float = 0.7,
-                 top_k: int = 8, eos_id: int | None = None,
+                 top_k: int = 8, repetition_penalty: float = 1.0, eos_id: int | None = None,
                  stop_sequences: list[list[int]] | None = None) -> torch.Tensor:
         self.eval()
         for _ in range(max_new_tokens):
             context = token_ids[:, -self.config["block_size"]:]
             logits, _ = self(context)
-            next_logits = logits[:, -1, :] / max(temperature, 1e-4)
+            next_logits = logits[:, -1, :].clone() / max(temperature, 1e-4)
+            if repetition_penalty != 1.0:
+                for b in range(token_ids.shape[0]):
+                    prev_tokens = torch.unique(token_ids[b])
+                    for t in prev_tokens:
+                        if next_logits[b, t] > 0:
+                            next_logits[b, t] /= repetition_penalty
+                        else:
+                            next_logits[b, t] *= repetition_penalty
             if top_k > 0:
                 values, _ = torch.topk(next_logits, min(top_k, next_logits.size(-1)))
                 next_logits[next_logits < values[:, [-1]]] = -float("inf")

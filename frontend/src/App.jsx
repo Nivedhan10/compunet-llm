@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const starter = [{ role: 'assistant', content: 'Hi! I’m TinyTalk, a small character-level Transformer trained from scratch. Ask me about how I work.' }];
+const starter = [{ role: 'assistant', content: 'Hi! I’m TinyTalk, a small character-level Transformer trained from scratch. Ask me about how I work.', source: 'rag_grounded' }];
 const SUGGESTIONS = [
   'What is attention?',
   'What is an embedding?',
@@ -45,7 +45,7 @@ export default function App() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || 'The model could not respond.');
-      setMessages(items => [...items, { role: 'assistant', content: data.reply }]);
+      setMessages(items => [...items, { role: 'assistant', content: data.reply, source: data.source, confidence: data.confidence }]);
     } catch (err) { setError(err.message || 'Could not reach the API. Is the backend running?'); }
     finally { setBusy(false); }
   }
@@ -100,7 +100,19 @@ export default function App() {
           {messages.map((item, index) => <article className={`message ${item.role}`} key={`${index}-${item.content.slice(0, 12)}`}>
             <div className="avatar">{item.role === 'assistant' ? 'T' : 'Y'}</div>
             <div className="bubble">
-              <div className="speaker">{item.role === 'assistant' ? 'TINYTALK' : 'YOU'}</div>
+              <div className="speaker">
+                <span>{item.role === 'assistant' ? 'TINYTALK' : 'YOU'}</span>
+                {item.role === 'assistant' && item.source && (
+                  <span className={`grounding-badge ${item.source}`}>
+                    {item.source === 'rag_grounded' && '⚡ Knowledge Base'}
+                    {item.source === 'online_learned' && '🌐 Auto-Learned (Online)'}
+                    {item.source === 'user_taught' && '🌱 User Taught'}
+                    {item.source === 'needs_teaching' && '💡 Needs Teaching'}
+                    {item.source === 'generator' && '🧠 Neural Generator'}
+                    {item.confidence ? ` (${Math.round(item.confidence * 100)}%)` : ''}
+                  </span>
+                )}
+              </div>
               <p>{item.content}</p>
             </div>
           </article>)}

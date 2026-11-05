@@ -55,7 +55,7 @@ React renders the transcript, loading state, error banner, and quick suggested q
 
 ## Automated Verification
 
-An automated test suite under `tests/test_tinytalk.py` contains 12 unit and integration tests verifying:
+An automated test suite under `tests/test_tinytalk.py` contains 14 unit and integration tests verifying:
 1. Tokenizer encode/decode roundtrip invertibility.
 2. Tokenizer `<unk>` fallback for out-of-vocabulary characters.
 3. Tokenizer vocabulary JSON serialization and loading.
@@ -64,10 +64,20 @@ An automated test suite under `tests/test_tinytalk.py` contains 12 unit and inte
 6. Strict causality property (future tokens cannot alter past token logits).
 7. Autoregressive generation output sequence dimensions.
 8. Generation loop execution with optional `eos_id`.
-9. FastAPI `/health` endpoint verifying model and vocabulary loadability.
-10. FastAPI `/chat` input schema validation and error rejection.
-11. End-to-end `/chat` inference and response generation.
-12. Safe prompt truncation for oversized inputs while preserving `User: ` and `\nAssistant:` role delimiters.
+9. Zero-dependency RAG exact match retrieval from curated dialogues.
+10. RAG rejection and graceful generative fallback for out-of-domain queries.
+11. FastAPI `/health` endpoint verifying model and vocabulary loadability.
+12. FastAPI `/chat` input schema validation and error rejection.
+13. End-to-end `/chat` inference and response generation.
+14. Safe prompt truncation for oversized inputs while preserving `User: ` and `\nAssistant:` role delimiters.
+
+## RAG Knowledge Grounding & Ingestion
+
+Character-level generative models trained from scratch on small corpora can suffer from autoregressive spelling drift when sampling under high temperatures. To provide production-grade reliability and factual accuracy, TinyTalk features a zero-dependency Retrieval-Augmented Generation (RAG) architecture (`tinytalk/rag.py`):
+- **BM25 Content-Word Matching:** Indexes both question intent and answer concepts, computing inverse document frequencies (IDF) over non-stopword tokens.
+- **Typo Tolerance:** Employs fuzzy matching via standard library `difflib.SequenceMatcher` on words of 5+ characters to match misspelled user inputs (e.g., "embeding" -> "embedding").
+- **Dynamic Routing:** High-confidence matches (score $\ge 2.5$) return verified factual responses with an active grounding badge in the UI. Unmatched or novel queries gracefully fall back to the from-scratch causal Transformer with low-temperature sampling and repetition penalties.
+- **External Web & Document Ingestion:** The `scripts/import_knowledge.py` utility can ingest any web URL, Wikipedia article, or local Markdown/text file, extracting clean paragraphs into `data/knowledge.jsonl` which the RAG system indexes automatically.
 
 ## Install and run
 

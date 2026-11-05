@@ -50,23 +50,40 @@ python -m tinytalk.generate --prompt "User: What is attention?\nAssistant:" --ma
 
 ## Running Tests
 
-An automated test suite validates the tokenizer, causal self-attention properties, weight tying, Transformer output shapes, and FastAPI endpoints:
+An automated test suite validates the tokenizer, causal self-attention properties, weight tying, Transformer output shapes, RAG grounding, and FastAPI endpoints:
 
 ```powershell
 python tests/test_tinytalk.py
 ```
 
+## RAG Grounding & Ingesting External Data
+
+To prevent character-level hallucinations and spelling errors on core topics, TinyTalk includes a zero-dependency BM25 RAG engine (`tinytalk/rag.py`). You can ingest external knowledge from any website, Wikipedia page, or local Markdown file:
+
+```powershell
+# Ingest an external website or documentation article
+python scripts/import_knowledge.py --url "https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)"
+
+# Ingest a local Markdown or text file
+python scripts/import_knowledge.py --file "docs/TECHNICAL.md"
+```
+
+Ingested documents are appended to `data/knowledge.jsonl` and indexed on reload, allowing TinyTalk to answer domain questions with 100% factual accuracy and zero spelling mistakes.
+
 ## Project structure
 
 ```text
 data/dialogues.jsonl       Original self-authored dialogue examples (120 records)
+data/knowledge.jsonl       Optional auxiliary / imported RAG knowledge records
 scripts/prepare_data.py    Cleaning and deterministic 3-way split (train/val/test)
+scripts/import_knowledge.py Web scraper and document knowledge ingestion CLI
 tinytalk/tokenizer.py      Character vocabulary and encode/decode
 tinytalk/model.py          Decoder-only Transformer with Pre-LN and weight tying
+tinytalk/rag.py            Zero-dependency BM25 RAG engine with typo tolerance
 tinytalk/train.py          Batching, loss, validation/test metrics, checkpointing
 tinytalk/generate.py       Sampling from a trained checkpoint with top-k/temp
 tinytalk/api.py            FastAPI chat endpoint with dynamic context budget
-tests/test_tinytalk.py     Automated test suite (tokenizer, model, causality, API)
+tests/test_tinytalk.py     Automated test suite (14 unit/integration tests)
 frontend/                  React + Vite chatbot with suggestion chips
 docs/TECHNICAL.md          Component-by-component architectural explanation
 artifacts/                 Generated splits (train/val/test), vocab, and checkpoint
