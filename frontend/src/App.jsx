@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const starter = [{ role: 'assistant', content: 'Hi! I’m TinyTalk, a small character-level Transformer trained from scratch. Ask me about how I work.' }];
