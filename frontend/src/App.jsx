@@ -62,7 +62,11 @@ export default function App() {
       <a className="brand" href="#"><span className="brand-mark">T</span><span>TinyTalk <small>FROM SCRATCH</small></span></a>
       <div className="top-actions"><span className={`status ${status}`}><i />{status === 'ready' ? 'Model ready' : status === 'needs_training' ? 'Needs training' : status === 'offline' ? 'API offline' : status === 'error' ? 'Model error' : 'Checking model'}</span><button className="clear" onClick={clearChat}>New chat</button></div>
     </header>
-    <section className="intro"><div className="eyebrow"><span /> EDUCATIONAL LANGUAGE MODEL</div><h1>A tiny model.<br /><em>Built from first principles.</em></h1><p>Ask about tokens, attention, or training. TinyTalk was trained from random initialization on a small, original dialogue dataset.</p></section>
+    <section className={`intro ${messages.length > 1 ? 'compact' : ''}`}>
+      <div className="eyebrow"><span /> EDUCATIONAL LANGUAGE MODEL</div>
+      <h1>A tiny model.<br /><em>Built from first principles.</em></h1>
+      <p>Ask about tokens, attention, or training. TinyTalk was trained from random initialization on a small, original dialogue dataset.</p>
+    </section>
     <section className="chat" aria-label="Conversation">
       {messages.map((item, index) => <article className={`message ${item.role}`} key={`${index}-${item.content.slice(0, 12)}`}>
         <div className="avatar">{item.role === 'assistant' ? 'T' : 'Y'}</div>
