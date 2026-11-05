@@ -11,6 +11,10 @@ from pydantic import BaseModel, Field
 
 from tinytalk.generate import load_model
 
+# Limit CPU threads to avoid OpenMP contention in multi-core and container environments
+if not torch.cuda.is_available():
+    torch.set_num_threads(min(4, torch.get_num_threads()))
+
 app = FastAPI(title="TinyTalk API", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173",
                    "http://localhost:5174", "http://127.0.0.1:5174"],
@@ -91,17 +95,9 @@ def chat(request: ChatRequest) -> ChatResponse:
 
     device = next(model.parameters()).device
     ids = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long, device=device)
+    stop_seqs = [tokenizer.encode("\nUser:"), tokenizer.encode("\n\nUser:")]
     with torch.inference_mode():
-        output = model.generate(ids, max_new_tokens=240, temperature=0.6, top_k=6)[0].tolist()
-    reply = tokenizer.decode(output[len(ids[0]):]).split("\nUser:", 1)[0].split("\n\nUser:", 1)[0].strip()
-    if not reply:
-        reply = "I am a small Transformer learning from scratch. Try asking about attention, embeddings, or training!"
-    return ChatResponse(reply=reply)
-
-    device = next(model.parameters()).device
-    ids = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long, device=device)
-    with torch.inference_mode():
-        output = model.generate(ids, max_new_tokens=240, temperature=0.6, top_k=6)[0].tolist()
+        output = model.generate(ids, max_new_tokens=120, temperature=0.6, top_k=6, stop_sequences=stop_seqs)[0].tolist()
     reply = tokenizer.decode(output[len(ids[0]):]).split("\nUser:", 1)[0].split("\n\nUser:", 1)[0].strip()
     if not reply:
         reply = "I am a small Transformer learning from scratch. Try asking about attention, embeddings, or training!"

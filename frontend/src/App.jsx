@@ -24,7 +24,12 @@ export default function App() {
   useEffect(() => { localStorage.setItem('tinytalk-history', JSON.stringify(messages)); }, [messages]);
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, busy]);
   useEffect(() => {
-    fetch(`${API}/health`).then(r => r.json()).then(data => setStatus(data.status)).catch(() => setStatus('offline'));
+    fetch(`${API}/health`)
+      .then(async response => {
+        const data = await response.json();
+        setStatus(response.ok ? (data.status || 'error') : 'error');
+      })
+      .catch(() => setStatus('offline'));
   }, []);
 
   async function sendMessage(rawText) {

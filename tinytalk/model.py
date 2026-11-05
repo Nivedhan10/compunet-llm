@@ -81,8 +81,9 @@ class TinyTransformer(nn.Module):
         return logits, loss
 
     @torch.no_grad()
-    def generate(self, token_ids: torch.Tensor, max_new_tokens: int = 200, temperature: float = 0.7,
-                 top_k: int = 8, eos_id: int | None = None) -> torch.Tensor:
+    def generate(self, token_ids: torch.Tensor, max_new_tokens: int = 120, temperature: float = 0.7,
+                 top_k: int = 8, eos_id: int | None = None,
+                 stop_sequences: list[list[int]] | None = None) -> torch.Tensor:
         self.eval()
         for _ in range(max_new_tokens):
             context = token_ids[:, -self.config["block_size"]:]
@@ -96,4 +97,8 @@ class TinyTransformer(nn.Module):
             token_ids = torch.cat((token_ids, next_id), dim=1)
             if eos_id is not None and (next_id == eos_id).all():
                 break
+            if stop_sequences and token_ids.shape[0] == 1:
+                seq = token_ids[0].tolist()
+                if any(len(seq) >= len(stop) and seq[-len(stop):] == stop for stop in stop_sequences):
+                    break
         return token_ids
