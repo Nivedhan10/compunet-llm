@@ -72,7 +72,7 @@ def main() -> None:
     if test_ids is not None:
         all_datasets["test"] = test_ids
     for name, tensor in all_datasets.items():
-        if len(tensor) <= args.block_size + 1:
+        if len(tensor) < args.block_size + 1:
             raise SystemExit(f"Dataset split '{name}' ({len(tensor)} tokens) is too short for block size {args.block_size}; reduce --block-size")
 
     # Periodic evaluation uses only train and validation to maintain test set integrity

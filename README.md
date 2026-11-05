@@ -40,7 +40,7 @@ Open the Vite URL (usually http://localhost:5173). The backend listens on http:/
 
 ## Training and evaluation
 
-`python -m tinytalk.train --steps 3500 --block-size 128` saves `artifacts/tinytalk.pt`, `artifacts/vocab.json`, and records final evaluation loss across train, validation, and test splits. The default model is 64-dimensional with two Transformer blocks and a 128-character context. Periodic evaluation monitors training and validation loss, while the held-out test split is evaluated once at the conclusion of training. Reported evaluation losses are sampled window estimates (averaging 20 random windows per split) providing diagnostic generalization metrics. Reduce `--steps` for a quick run, or increase it for a more converged toy model. CPU training is fast and CUDA is used automatically when available.
+`python -m tinytalk.train --steps 3500 --block-size 128` saves `artifacts/tinytalk.pt`, `artifacts/vocab.json`, and records final evaluation loss across train, validation, and test splits. The default model is 64-dimensional with two Transformer blocks and a 128-character context. Periodic evaluation monitors training and validation loss, while the held-out test split is evaluated once at the conclusion of training. Reported evaluation losses are sampled window estimates (averaging 20 batches of 16 windows, totaling 320 sampled windows per split) providing diagnostic generalization metrics. Reduce `--steps` for a quick run, or increase it for a more converged toy model. CPU training is fast and CUDA is used automatically when available.
 
 To sample a continuation directly:
 

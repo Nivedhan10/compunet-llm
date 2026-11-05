@@ -45,7 +45,7 @@ The feed-forward network is a two-layer GELU network. After the final normalizat
 
 Training samples fixed-length windows from the training character stream. The input is the window and the target is shifted by one character, teaching next-character prediction. Cross entropy compares each position's vocabulary scores with its correct next character. AdamW updates parameters using gradients from backpropagation; gradient clipping limits unusually large updates.
 
-At intervals, the script estimates average loss on random training and held-out validation windows. Periodic evaluation is strictly restricted to training and validation splits to prevent data leakage. At the end of training, the model is evaluated once on the untouched held-out test split. Note that the reported validation and test losses are sampled window estimates (averaging 20 random windows from each split) rather than an exhaustive single-pass metric. The checkpoint stores the model state and architecture configuration; `vocab.json` stores the matching tokenizer. Both are needed to use the checkpoint. Generation repeatedly predicts the next character, samples from top-k candidates after temperature scaling, and appends the result. The API stops the visible answer when a new `User:` turn begins.
+At intervals, the script estimates average loss on random training and held-out validation windows. Periodic evaluation is strictly restricted to training and validation splits to prevent data leakage. At the end of training, the model is evaluated once on the untouched held-out test split. Note that reported evaluation losses are sampled window estimates (averaging 20 batches of 16 windows, totaling 320 sampled windows per split) rather than an exhaustive single-pass metric. The checkpoint stores the model state and architecture configuration; `vocab.json` stores the matching tokenizer. Both are needed to use the checkpoint. Generation repeatedly predicts the next character, samples from top-k candidates after temperature scaling, and appends the result. The API stops the visible answer when a new `User:` turn begins.
 
 ## API and frontend
 
@@ -56,17 +56,18 @@ React renders the transcript, loading state, error banner, and quick suggested q
 ## Automated Verification
 
 An automated test suite under `tests/test_tinytalk.py` contains 12 unit and integration tests verifying:
-1. Tokenizer encode/decode roundtrip and `<unk>` character handling.
-2. Tokenizer serialization and deserialization.
-3. Transformer output tensor shapes and cross-entropy loss computation.
-4. Parameter tying between language head and token embeddings.
-5. Strict causality property (future tokens cannot alter past token logits).
-6. Generation output sequence dimensions.
-7. Safe execution of generation with optional `eos_id`.
-8. FastAPI health check (validating model checkpoint and vocabulary loading).
-9. FastAPI input schema validation and error handling.
-10. End-to-end chat inference and response generation.
-11. Safe truncation of inputs that exceed the context window while preserving role markers.
+1. Tokenizer encode/decode roundtrip invertibility.
+2. Tokenizer `<unk>` fallback for out-of-vocabulary characters.
+3. Tokenizer vocabulary JSON serialization and loading.
+4. Transformer forward output tensor shapes and cross-entropy loss computation.
+5. Parameter tying between language head and token embeddings.
+6. Strict causality property (future tokens cannot alter past token logits).
+7. Autoregressive generation output sequence dimensions.
+8. Generation loop execution with optional `eos_id`.
+9. FastAPI `/health` endpoint verifying model and vocabulary loadability.
+10. FastAPI `/chat` input schema validation and error rejection.
+11. End-to-end `/chat` inference and response generation.
+12. Safe prompt truncation for oversized inputs while preserving `User: ` and `\nAssistant:` role delimiters.
 
 ## Install and run
 
