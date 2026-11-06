@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from tinytalk.dev_assistant import find_developer_response
 from tinytalk.generate import load_model
-from tinytalk.online_search import fetch_online_knowledge
+from tinytalk.online_search import fetch_online_knowledge, detect_intent_and_entity
 from tinytalk.rag import TinyRAG
 
 # Limit CPU threads to avoid OpenMP contention in multi-core and container environments
@@ -161,28 +161,52 @@ def chat(request: ChatRequest) -> ChatResponse:
             confidence=1.0
         )
 
-    # 4. Local RAG grounding (Curated Dialogues + Previously Learned Knowledge)
-    matches = rag.retrieve(msg_clean, top_k=1, threshold=2.2)
-    if matches:
-        top = matches[0]
-        source_label = "rag_grounded" if ("dialogues" in top.source or "knowledge_base" in top.source) else "online_learned"
+    # 4. Context & Intent Analysis
+    target_entity, intent, meta = detect_intent_and_entity(msg_clean, request.history)
+    is_clarification = meta.get("is_clarification", False)
+
+    # 5. Search current reference sources before using saved online material.
+    # This prevents a previously cached fact (e.g. current team/retirement status)
+    # from silently winning over newer evidence.
+    title, answer_text, source_url = fetch_online_knowledge(msg_clean, request.history)
+    if answer_text:
+        # Cache only with the resolved subject in its key: never store a pronoun-only
+        # question like "did he retire?" where it could match another conversation.
+        cache_question = f"{target_entity}: {msg_clean}" if target_entity else msg_clean
+        rag.add_and_save_knowledge(cache_question, answer_text, source=f"online:{source_url or 'reference'}")
         return ChatResponse(
-            reply=top.answer,
-            source=source_label,
-            confidence=round(top.confidence, 2)
+            reply=answer_text,
+            source="online_learned",
+            confidence=0.75
         )
 
-    # 4. Online Auto-Knowledge Search & Auto-Learning
-    title, extract, source_url = fetch_online_knowledge(msg_clean)
-    if extract:
-        # Automatically update knowledge base so TinyTalk permanently remembers it
-        rag.add_and_save_knowledge(msg_clean, extract, source=source_url or "online_wikipedia")
-        reply_with_ref = f"{extract}\n\n[Reference: {source_url}]"
-        return ChatResponse(
-            reply=reply_with_ref,
-            source="online_learned",
-            confidence=1.0
-        )
+    # 6. Local RAG grounding (curated corpus and previously learned knowledge).
+    # Clarifications bypass fuzzy local retrieval because it may match the prior
+    # subject instead of the correction supplied by the user.
+    if not is_clarification:
+        matches = rag.retrieve(msg_clean, top_k=1, threshold=2.2)
+        if matches:
+            top = matches[0]
+            is_time_sensitive = intent in {"retirement_status", "life_status"} or bool(
+                re.search(r"\b(current|currently|latest|today|now|playing|team|club|roster|score|status)\b", msg_clean, re.I)
+            )
+            # Never present a previously cached web fact as current when live
+            # sources could not be reached. External facts need a fresh citation.
+            if is_time_sensitive and (top.source.startswith("online:") or top.source.startswith("http")):
+                top = None
+            if top is None:
+                matches = []
+        if matches:
+            top = matches[0]
+            if top.source.startswith("online:"):
+                # Online facts can go stale and are only a fallback when live search
+                # is unavailable. Their confidence is deliberately lower.
+                return ChatResponse(reply=top.answer, source="online_cached", confidence=0.45)
+            return ChatResponse(
+                reply=top.answer,
+                source="rag_grounded",
+                confidence=round(top.confidence, 2)
+            )
 
     # 5. Generative fallback or safe educational guidance
     # If the caller requested an explicit token limit (e.g. automated tests), run the neural generator

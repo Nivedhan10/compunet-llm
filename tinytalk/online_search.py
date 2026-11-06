@@ -9,10 +9,32 @@ Connects to open web resources and official developer platforms including:
 from __future__ import annotations
 
 import gzip
+import html
 import json
 import re
 import urllib.parse
 import urllib.request
+
+# Search may use DuckDuckGo to discover results, but only these reference sites
+# are accepted as answer sources. Add domains by configuration/policy, not by
+# adding person-specific facts or names to application code.
+ALLOWED_REFERENCE_DOMAINS = (
+    "wikipedia.org", "stackoverflow.com", "stackexchange.com", "huggingface.co",
+    "python.org", "pytorch.org", "fastapi.tiangolo.com", "react.dev", "developer.mozilla.org",
+)
+
+
+def is_allowed_reference_url(url: str) -> bool:
+    """Reject non-HTTPS and off-allowlist result URLs before citing them."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        host = (parsed.hostname or "").lower().rstrip(".")
+        return parsed.scheme == "https" and any(
+            host == domain or host.endswith("." + domain)
+            for domain in ALLOWED_REFERENCE_DOMAINS
+        )
+    except ValueError:
+        return False
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -102,7 +124,7 @@ def clean_topic_query(query: str) -> str:
         r"^(?:where is\s+|where are\s+|where was\s+)",
         r"^(?:how does\s+|how do\s+|how to\s+|how\s+)",
         r"^(?:make|cook|prepare|bake|brew)\s+",
-        r"^(?:the\s+|a\s+|an\s+)",
+        r"^(?:the\s+|a\s+|an\s+)(?![A-Z])",
     ]
 
     changed = True
@@ -260,34 +282,163 @@ def search_web_ddg(query: str) -> tuple[str | None, str | None, str | None]:
     req = urllib.request.Request("https://lite.duckduckgo.com/lite/", data=data, headers=HEADERS)
     try:
         with urllib.request.urlopen(req, timeout=4.5) as resp:
-            html = resp.read().decode("utf-8", errors="ignore")
-            links = re.findall(r"<a[^>]*rel=[\"']nofollow[\"'][^>]*href=[\"']([^\"']*)[\"'][^>]*>(.*?)</a>", html)
-            snippets = re.findall(r"class=[\"']result-snippet[\"']>(.*?)</td>", html, re.DOTALL)
-            if snippets:
-                valid_snippets = []
-                for s in snippets[:3]:
+            page_html = resp.read().decode("utf-8", errors="ignore")
+            links = re.findall(r"<a[^>]*rel=[\"']nofollow[\"'][^>]*href=[\"']([^\"']*)[\"'][^>]*>(.*?)</a>", page_html)
+            snippets = re.findall(r"class=[\"']result-snippet[\"']>(.*?)</td>", page_html, re.DOTALL)
+            if snippets and links:
+                for index, (href, raw_title) in enumerate(links[:len(snippets)]):
+                    parsed_link = urllib.parse.urlparse(html.unescape(href))
+                    target_url = urllib.parse.parse_qs(parsed_link.query).get("uddg", [href])[0]
+                    target_url = urllib.parse.unquote(target_url)
+                    if not is_allowed_reference_url(target_url):
+                        continue
+                    s = snippets[index]
                     c = re.sub(r"<[^>]+>", "", s).strip()
                     c = re.sub(r"\s+", " ", c)
                     if len(c) > 35:
-                        valid_snippets.append(c)
-                if valid_snippets:
-                    top_url = links[0][0] if links else "https://duckduckgo.com"
-                    top_title = re.sub(r"<[^>]+>", "", links[0][1]).strip() if links else query
-                    combined = "\n\n".join(valid_snippets)
-                    return top_title, combined, top_url
+                        top_title = html.unescape(re.sub(r"<[^>]+>", "", raw_title).strip())
+                        return top_title, html.unescape(c), target_url
     except Exception:
         pass
     return None, None, None
 
 
-def fetch_online_knowledge(query: str) -> tuple[str | None, str | None, str | None]:
-    """Search live internet sources (Wikipedia, Stack Overflow, Hugging Face, Open Web) dynamically.
+STOP_STARTERS = {
+    "who", "what", "where", "when", "why", "how", "did", "is", "was", "are",
+    "were", "has", "have", "can", "could", "will", "would", "does", "do",
+    "tell", "me", "about", "the", "a", "an", "i", "mean", "meant", "please"
+}
+
+PREDICATE_NOISE = {
+    "retired", "retire", "retirement", "from", "alive", "dead", "die", "died",
+    "today", "now", "still", "playing", "active", "born", "live", "lives"
+}
+CAPITALIZED_QUESTION_STARTERS = {
+    "who", "what", "where", "when", "why", "how", "did", "is", "was", "are",
+    "were", "has", "have", "can", "could", "will", "would", "does", "do",
+}
+
+
+def extract_general_subject(query: str) -> str:
+    """Grammatically extract the subject entity from a query using general NLP with ZERO hardcoded names."""
+    # 1. Check for clarification / correction: "I mean [the] X", "I meant X", "talking about X"
+    clarif = re.search(r"\b(?:i mean|i meant|talking about|referring to)\s+(?:the\s+)?(.+?)(?:,|\?|$)", query, re.I)
+    if clarif:
+        return clarif.group(1).strip("?.! \t\r\n")
+
+    # 2. Extract alphanumeric tokens
+    words = re.findall(r"\b[a-zA-Z0-9'-]+\b", query)
+    if not words:
+        return query.strip("?.! ")
+
+    # 3. Look for capitalized multi-word sequences (proper nouns)
+    caps_matches = re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b", query)
+    valid_caps = []
+    for match in caps_matches:
+        parts = match.split()
+        # Keep capitalized articles such as "The Rock" and "The Undertaker";
+        # they can be part of an entity's actual name.
+        while parts and parts[0].lower() in CAPITALIZED_QUESTION_STARTERS:
+            parts.pop(0)
+        if parts:
+            valid_caps.append(" ".join(parts))
+    if valid_caps:
+        return max(valid_caps, key=len)
+
+    # 4. Strip leading question starters and predicate noise to isolate the subject
+    content_words = [w for w in words if w.lower() not in STOP_STARTERS and w.lower() not in PREDICATE_NOISE]
+    if content_words:
+        return " ".join(content_words)
+
+    return query.strip("?.! ")
+
+
+def detect_intent_and_entity(query: str, history: list[dict] | None = None) -> tuple[str, str, dict]:
+    """Resolve active entity and question intent using general conversation coreference with ZERO hardcoded names."""
+    q_clean = query.strip()
+    history = history or []
+
+    # 1. Check for clarification / correction
+    is_clarification = bool(re.search(r"\b(?:i mean|i meant|talking about|referring to)\b", q_clean, re.I))
+    current_subject = extract_general_subject(q_clean)
+
+    # 2. Extract most recent substantive subject from history
+    prev_subject = None
+    for turn in reversed(history):
+        # Assistant output is generated/retrieved text and may mention many entities.
+        # Only user turns are evidence for what a follow-up pronoun refers to.
+        role = turn.get("role", "user") if isinstance(turn, dict) else getattr(turn, "role", "user")
+        if role != "user":
+            continue
+        content = turn.get("content", "") if isinstance(turn, dict) else getattr(turn, "content", "")
+        cand = extract_general_subject(content)
+        if cand and len(cand) > 2 and cand.lower() not in STOP_STARTERS:
+            prev_subject = cand
+            break
+
+    # 3. Coreference resolution: pronouns (he, she, they, it) and sub-tokens
+    target_entity = current_subject
+    q_words = set(re.findall(r"\b[a-z0-9]+\b", q_clean.lower()))
+
+    # If user used a pronoun ("did he retire?"), inherit the previous entity
+    if q_words & {"he", "she", "they", "it", "him", "her"} and prev_subject:
+        target_entity = prev_subject
+    # If the user used a single partial word of the previous entity ("did ronaldo retire?", "did kohli retire?"), inherit the full entity
+    elif prev_subject and current_subject:
+        cs_tokens = set(current_subject.lower().split())
+        ps_tokens = set(prev_subject.lower().split())
+        if cs_tokens.issubset(ps_tokens) and len(cs_tokens) < len(ps_tokens):
+            target_entity = prev_subject
+
+    # 4. Detect Question Intent
+    q_lower = q_clean.lower()
+    intent = "general"
+    if re.search(r"\b(?:retired?|retire|still playing|still active)\b", q_lower):
+        intent = "retirement_status"
+    elif re.search(r"\b(?:alive|dead|die|died|passed away)\b", q_lower):
+        intent = "life_status"
+    elif re.search(r"\b(?:free|open source|paid|proprietary)\b", q_lower):
+        intent = "open_source_status"
+    elif re.search(r"^(?:did|is|was|are|were|has|have|can|does|do)\b", q_lower):
+        intent = "verification_yes_no"
+
+    return target_entity or clean_topic_query(query), intent, {
+        "is_clarification": is_clarification,
+        "raw_query": q_clean,
+        "resolved_entity": target_entity
+    }
+
+
+def synthesize_wise_answer(entity: str, raw_extract: str, intent: str, meta: dict, source_url: str) -> str:
+    """Present retrieved evidence without inferring facts the source did not state.
+
+    TinyTalk has no second language model, so keyword-based "yes/no" conclusions
+    are intentionally avoided. The linked source is the authority for interpretation.
+    """
+    is_clarification = meta.get("is_clarification", False)
+    prefix = f"For **{entity}**: " if is_clarification else ""
+    return f"{prefix}{raw_extract}\n\n[Source: {source_url}]"
+
+
+def fetch_online_knowledge(query: str, history: list[dict] | None = None) -> tuple[str | None, str | None, str | None]:
+    """Search live internet sources (Wikipedia, Stack Overflow, Hugging Face, Open Web) dynamically and synthesize intelligent answers.
     
     Returns:
-        tuple of (title, summary_extract, source_url) or (None, None, None).
+        tuple of (title, synthesized_answer, source_url) or (None, None, None).
     """
-    topic = clean_topic_query(query)
-    q_lower = query.lower()
+    entity, intent, meta = detect_intent_and_entity(query, history)
+    topic = clean_topic_query(entity) if entity else clean_topic_query(query)
+    # A pronoun-only follow-up must include its resolved subject in the search.
+    search_query = query
+    if entity and entity.lower() not in query.lower():
+        search_query = f"{entity} {query}"
+    q_lower = search_query.lower()
+    # A biography summary is insufficient for questions about changing facts.
+    # Search the full question so the source lookup sees the requested predicate.
+    needs_fresh_result = intent in {"retirement_status", "life_status", "verification_yes_no"} or bool(
+        re.search(r"\b(current|currently|latest|today|now|playing|team|club|roster|score|status)\b", q_lower)
+    )
+    search_topic = search_query if needs_fresh_result else topic
 
     # Strategy 1: AI Model / Transformers / Hugging Face Queries
     if any(k in q_lower for k in ["hugging face", "huggingface", "hf model", "pretrained model", "bert model", "gpt model", "llama model"]):
@@ -297,34 +448,41 @@ def fetch_online_knowledge(query: str) -> tuple[str | None, str | None, str | No
 
     # Strategy 2: Code error, exception, or runtime bug -> Stack Overflow first
     if any(k in q_lower for k in ["error", "exception", "traceback", "syntaxerror", "indexerror", "keyerror", "how to catch", "failed to", "bug", "stackoverflow"]):
-        title, extract, url = search_stack_overflow(query)
+        title, extract, url = search_stack_overflow(search_query)
         if extract:
             return title, extract, url
 
     # Strategy 3: How-to guides, recipes, and practical step-by-step questions -> Web search + Wikipedia
     if any(k in q_lower for k in ["how to make", "how to cook", "how to prepare", "how to bake", "how to brew", "recipe", "steps properly", "step by step"]):
-        # Try open web search first for rich procedural how-to guides (e.g. wikiHow, cooking blogs)
-        title, extract, url = search_web_ddg(query)
+        title, extract, url = search_web_ddg(search_query)
         if extract and len(extract) > 50:
             return title, extract, url
-        # Fall back to Wikipedia
-        title, extract, url = search_wikipedia(query, topic)
+        title, extract, url = search_wikipedia(search_query, search_topic)
         if extract:
             return title, extract, url
 
-    # Strategy 4: General encyclopedic concepts, animals, geography, science, definitions -> Wikipedia
-    title, extract, url = search_wikipedia(query, topic)
-    if extract:
-        return title, extract, url
+    # Prefer a result for the complete question when asking about changing facts;
+    # the accepted result URL must pass the reference-domain allowlist.
+    if needs_fresh_result:
+        title, extract, url = search_web_ddg(search_query)
+        if extract:
+            return title, synthesize_wise_answer(topic or title, extract, intent, meta, url), url
 
-    # Strategy 5: Open Web Search (DuckDuckGo Lite) as universal fallback for any question
-    title, extract, url = search_web_ddg(query)
+    # Strategy 4: General encyclopedic concepts, persons, animals, geography, science -> Wikipedia
+    title, extract, url = search_wikipedia(search_query, search_topic)
     if extract:
-        return title, extract, url
+        wise_ans = synthesize_wise_answer(topic or title, extract, intent, meta, url)
+        return title, wise_ans, url
+
+    # Strategy 5: Open Web Search (DuckDuckGo Lite) as universal fallback
+    title, extract, url = search_web_ddg(search_query)
+    if extract:
+        wise_ans = synthesize_wise_answer(topic or title, extract, intent, meta, url)
+        return title, wise_ans, url
 
     # Strategy 6: Stack Overflow fallback for general programming terms
     if any(k in q_lower for k in ["python", "javascript", "java", "code", "function", "class", "import", "package", "api", "database", "sql"]):
-        title, extract, url = search_stack_overflow(query)
+        title, extract, url = search_stack_overflow(search_query)
         if extract:
             return title, extract, url
 
