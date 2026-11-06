@@ -391,6 +391,12 @@ h1 em {
   border: 1px solid rgba(16, 185, 129, 0.28);
 }
 
+.grounding-badge.recipe_guide {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+}
+
 .code-block-wrapper {
   margin: 14px 0;
   border-radius: 8px;

@@ -27,7 +27,16 @@ STOPWORDS = {
     "them", "themselves", "then", "there", "these", "they", "this", "those",
     "through", "to", "too", "under", "until", "up", "very", "was", "we", "were",
     "what", "when", "where", "which", "while", "who", "whom", "why", "with", "would",
-    "you", "your", "yours", "yourself", "yourselves", "tell"
+    "you", "your", "yours", "yourself", "yourselves", "tell", "please", "generally"
+}
+
+GENERIC_WORDS = {
+    "start", "run", "stop", "restart", "command", "commands", "terminal", "console",
+    "cli", "code", "example", "examples", "difference", "compare", "use", "using",
+    "used", "work", "works", "working", "create", "make", "build", "install",
+    "step", "steps", "guide", "tutorial", "need", "know", "mean", "happens",
+    "get", "give", "show", "explain", "describe", "say", "general", "generally",
+    "help", "way", "good", "best", "common"
 }
 
 
@@ -44,6 +53,11 @@ class RAGMatch:
 def clean_words(text: str) -> list[str]:
     """Extract lowercased alphanumeric words, normalizing hyphens."""
     return re.findall(r"\b[a-z0-9]+\b", text.lower().replace("-", " "))
+
+
+def extract_subjects(text: str) -> set[str]:
+    """Extract distinct topic/entity subject words, excluding stopwords and generic verbs/actions."""
+    return {w for w in clean_words(text) if w not in STOPWORDS and w not in GENERIC_WORDS and len(w) > 1}
 
 
 class TinyRAG:
@@ -171,6 +185,7 @@ class TinyRAG:
             return []
 
         raw_words = clean_words(query)
+        q_subjects = extract_subjects(query)
         q_tokens = [self._resolve_word(w) for w in raw_words if w not in STOPWORDS and len(w) > 1]
         # If all words were stopwords (e.g. 'who are you', 'what can you do'), fall back to raw words
         if not q_tokens:
@@ -182,15 +197,37 @@ class TinyRAG:
         scored = []
 
         for i, doc in enumerate(self.documents):
-            # Question relevance check:
-            # Prevents a general query like "what is python" from falsely matching
-            # a specific subtopic like "binary search in python" or "how to read a json file in python"
-            doc_u_words = set(clean_words(doc["user"])) - STOPWORDS
-            if not doc_u_words:
-                doc_u_words = set(clean_words(doc["user"]))
+            doc_user_words = set(clean_words(doc["user"]))
+            doc_user_subjects = extract_subjects(doc["user"])
+            doc_all_words = set(clean_words(doc["user"] + " " + doc["assistant"]))
 
-            doc_cov = len(doc_u_words & set(q_tokens)) / max(1, len(doc_u_words))
+            # 1. Subject constraint:
+            # If the user query has specific subjects (e.g. 'django'), the candidate document
+            # MUST contain at least one of them
+            if q_subjects and not (q_subjects & doc_all_words):
+                continue
+
+            # If the candidate document's user question has specific subjects (e.g. 'frontend' or 'binary search'),
+            # the user query must contain at least one of them
+            if doc_user_subjects and not (doc_user_subjects & set(raw_words)):
+                continue
+
+            # 2. Document prompt coverage check:
+            # Prevents a general query like "what is python" from matching a specific subtopic
+            # like "binary search in python"
+            doc_u_content = doc_user_words - STOPWORDS
+            if not doc_u_content:
+                doc_u_content = doc_user_words
+
+            doc_cov = len(doc_u_content & set(q_tokens)) / max(1, len(doc_u_content))
             if doc_cov < 0.5:
+                continue
+
+            # 3. Query recall check:
+            # Multi-word queries must have at least 50% of their content terms present in the document
+            matched_q_terms = sum(1 for t in q_counts if t in doc_all_words)
+            coverage = matched_q_terms / max(1, len(q_counts))
+            if len(q_counts) >= 3 and coverage < 0.50:
                 continue
 
             tokens = self.doc_tokens[i]
@@ -198,19 +235,12 @@ class TinyRAG:
             counts = Counter(tokens)
             score = 0.0
 
-            matched_terms = 0
             for t in q_counts:
                 if t in counts:
-                    matched_terms += 1
                     tf = counts[t]
                     idf = self.idf.get(t, 0.5)
                     denom = tf + self.k1 * (1.0 - self.b + self.b * (dl / max(1.0, self.avg_dl)))
                     score += idf * (tf * (self.k1 + 1.0)) / denom
-
-            # Ensure multi-word queries match a reasonable percentage of query terms
-            coverage = matched_terms / max(1, len(q_counts))
-            if len(q_counts) >= 3 and coverage < 0.35:
-                continue
 
             if score >= threshold:
                 confidence = min(1.0, max(0.5, score / 8.0))

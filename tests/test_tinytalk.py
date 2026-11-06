@@ -170,6 +170,58 @@ class TestTinyRAG(unittest.TestCase):
         matches = self.rag.retrieve("What is the recipe for chocolate cake?", top_k=1, threshold=2.2)
         self.assertEqual(len(matches), 0)
 
+    def test_rag_rejects_subject_mismatch(self):
+        # Specific query for Django commands must never match unrelated "start the frontend"
+        matches = self.rag.retrieve("can you tell me the start command for django generally in terminal?", top_k=1)
+        for m in matches:
+            self.assertNotIn("frontend", m.matched_prompt.lower())
+            self.assertNotIn("vite", m.answer.lower())
+
+
+class TestDevAssistantAndSearch(unittest.TestCase):
+    def test_dev_assistant_django(self):
+        from tinytalk.dev_assistant import find_developer_response
+        res = find_developer_response("can you tell me the start command for django generally in terminal?")
+        self.assertIsNotNone(res)
+        self.assertIn("Django", res["title"])
+        self.assertIn("python manage.py runserver", res["content"])
+        self.assertIn("docs.djangoproject.com", res["doc_url"])
+
+    def test_online_search_clean_query(self):
+        from tinytalk.online_search import clean_topic_query
+        cleaned = clean_topic_query("can you tell me about the James Webb Space Telescope please?")
+        self.assertEqual(cleaned, "James Webb Space Telescope")
+
+    def test_online_search_multi_clause_cleaning(self):
+        from tinytalk.online_search import clean_topic_query
+        cleaned = clean_topic_query("how to make biryani? give me steps proeprly?")
+        self.assertEqual(cleaned, "biryani")
+
+    def test_tech_entity_resolution_for_java(self):
+        from tinytalk.online_search import resolve_tech_entity
+        self.assertEqual(resolve_tech_entity("java"), "Java (programming language)")
+        self.assertEqual(resolve_tech_entity("java prommaing language"), "Java (programming language)")
+
+    def test_dynamic_internet_retrieval_biryani(self):
+        from tinytalk.online_search import fetch_online_knowledge
+        title, extract, url = fetch_online_knowledge("how to make biryani? give me steps proeprly?")
+        self.assertIsNotNone(extract)
+        self.assertTrue(len(extract) > 20)
+        self.assertIsNotNone(url)
+
+    def test_dynamic_internet_retrieval_animal(self):
+        from tinytalk.online_search import fetch_online_knowledge
+        title, extract, url = fetch_online_knowledge("what is a red kangaroo?")
+        self.assertIsNotNone(extract)
+        self.assertIn("kangaroo", extract.lower())
+        self.assertIn("wikipedia.org", url)
+
+    def test_dynamic_internet_retrieval_stackoverflow(self):
+        from tinytalk.online_search import fetch_online_knowledge
+        title, extract, url = fetch_online_knowledge("how to catch ZeroDivisionError in python?")
+        self.assertIsNotNone(extract)
+        self.assertIn("stackoverflow.com", url)
+
 
 if __name__ == "__main__":
     unittest.main()

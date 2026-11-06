@@ -150,7 +150,7 @@ def chat(request: ChatRequest) -> ChatResponse:
             confidence=None
         )
 
-    # 3. Developer & Codebase Assistance Check (e.g. CRUD in Python, FastAPI, PyTorch, React)
+    # 3. Developer & Codebase Assistance Check (e.g. CRUD in Python, FastAPI, PyTorch, React, Java)
     dev_res = find_developer_response(msg_clean)
     if dev_res:
         reply_code = f"### {dev_res['title']}\n\n{dev_res['content']}\n\n[Official Documentation: {dev_res['doc_url']}]"

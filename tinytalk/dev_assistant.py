@@ -275,6 +275,172 @@ DEV_TEMPLATES: dict[str, dict[str, str]] = {
             "print('Found at index:', idx)  # 5\n"
             "```"
         )
+    },
+    "django_cli": {
+        "title": "Django CLI, Project Setup & Server Commands",
+        "doc_url": "https://docs.djangoproject.com/en/stable/intro/tutorial01/",
+        "doc_name": "Official Django Documentation",
+        "content": (
+            "Here are the standard terminal commands to create, configure, migrate, and start a Django application:\n\n"
+            "```bash\n"
+            "# 1. Install Django in your virtual environment\n"
+            "pip install django\n\n"
+            "# 2. Create a new Django project\n"
+            "django-admin startproject myproject\n"
+            "cd myproject\n\n"
+            "# 3. Create a Django application within the project\n"
+            "python manage.py startapp myapp\n\n"
+            "# 4. Generate and apply database migrations\n"
+            "python manage.py makemigrations\n"
+            "python manage.py migrate\n\n"
+            "# 5. Start the development server (default: http://127.0.0.1:8000/)\n"
+            "python manage.py runserver\n\n"
+            "# Optional: Run on a custom port or bind to all interfaces\n"
+            "# python manage.py runserver 0.0.0.0:8000\n"
+            "```\n\n"
+            "```python\n"
+            "# Minimal views.py in myapp:\n"
+            "from django.http import HttpResponse\n\n"
+            "def index(request):\n"
+            "    return HttpResponse('Hello from Django!')\n"
+            "```"
+        )
+    },
+    "flask_cli": {
+        "title": "Flask Application & Server Setup",
+        "doc_url": "https://flask.palletsprojects.com/en/stable/quickstart/",
+        "doc_name": "Official Flask Documentation",
+        "content": (
+            "Here is a complete Flask API application and the terminal commands to run it:\n\n"
+            "```python\n"
+            "# app.py\n"
+            "from flask import Flask, jsonify, request\n\n"
+            "app = Flask(__name__)\n\n"
+            "@app.route('/')\n"
+            "def home():\n"
+            "    return jsonify({'message': 'Flask server is running!', 'status': 200})\n\n"
+            "if __name__ == '__main__':\n"
+            "    app.run(debug=True, port=5000)\n"
+            "```\n\n"
+            "```bash\n"
+            "# Terminal commands:\n"
+            "pip install flask\n"
+            "flask --app app run --debug\n"
+            "# or directly:\n"
+            "python app.py\n"
+            "```"
+        )
+    },
+    "docker_cli": {
+        "title": "Docker Container Build & Run Commands",
+        "doc_url": "https://docs.docker.com/get-started/",
+        "doc_name": "Official Docker Documentation",
+        "content": (
+            "Here are the essential Docker commands to build and run containerized services:\n\n"
+            "```dockerfile\n"
+            "# Dockerfile\n"
+            "FROM python:3.11-slim\n"
+            "WORKDIR /app\n"
+            "COPY requirements.txt .\n"
+            "RUN pip install --no-cache-dir -r requirements.txt\n"
+            "COPY . .\n"
+            "EXPOSE 8000\n"
+            "CMD [\"uvicorn\", \"tinytalk.api:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\"]\n"
+            "```\n\n"
+            "```bash\n"
+            "# 1. Build image\n"
+            "docker build -t myapp:latest .\n\n"
+            "# 2. Run container mapping port 8000\n"
+            "docker run -d -p 8000:8000 --name myapp_container myapp:latest\n\n"
+            "# 3. Check logs and running containers\n"
+            "docker ps\n"
+            "docker logs -f myapp_container\n\n"
+            "# 4. Stop and remove container\n"
+            "docker stop myapp_container\n"
+            "docker rm myapp_container\n"
+            "```"
+        )
+    },
+    "git_cli": {
+        "title": "Git Version Control Workflow & CLI Commands",
+        "doc_url": "https://git-scm.com/doc",
+        "doc_name": "Official Git Documentation",
+        "content": (
+            "Here are the core Git terminal commands for everyday development:\n\n"
+            "```bash\n"
+            "# 1. Clone repository or initialize new\n"
+            "git clone <repository_url>\n"
+            "git init\n\n"
+            "# 2. Inspect workspace\n"
+            "git status\n"
+            "git diff\n\n"
+            "# 3. Stage changes and commit\n"
+            "git add .\n"
+            "git commit -m \"feat: implement new capability\"\n\n"
+            "# 4. Branching\n"
+            "git branch -M main\n"
+            "git checkout -b feature/feature-name\n\n"
+            "# 5. Push changes to remote\n"
+            "git push -u origin feature/feature-name\n"
+            "```"
+        )
+    },
+    "node_vite_cli": {
+        "title": "Node.js & Vite Frontend Development Commands",
+        "doc_url": "https://vite.dev/guide/",
+        "doc_name": "Official Vite Documentation",
+        "content": (
+            "Here are the standard terminal commands to create and run a React Vite frontend:\n\n"
+            "```bash\n"
+            "# 1. Scaffold a React project with Vite\n"
+            "npm create vite@latest my-app -- --template react\n"
+            "cd my-app\n\n"
+            "# 2. Install dependencies\n"
+            "npm install\n\n"
+            "# 3. Start development server with Hot Module Replacement (HMR)\n"
+            "npm run dev\n\n"
+            "# 4. Build optimized production bundle\n"
+            "npm run build\n"
+            "npm run preview\n"
+            "```"
+        )
+    },
+    "java_basics": {
+        "title": "Java Object-Oriented Programming & CLI Execution",
+        "doc_url": "https://docs.oracle.com/en/java/",
+        "doc_name": "Official Oracle Java Documentation",
+        "content": (
+            "Here is a complete, clean Java class demonstration with object-oriented encapsulation and compilation instructions:\n\n"
+            "```java\n"
+            "// Main.java\n"
+            "public class Main {\n"
+            "    public static void main(String[] args) {\n"
+            "        System.out.println(\"Hello from Java!\");\n\n"
+            "        // Object-Oriented Instance\n"
+            "        Developer dev = new Developer(\"Alex\", \"Java\");\n"
+            "        dev.displayInfo();\n"
+            "    }\n"
+            "}\n\n"
+            "class Developer {\n"
+            "    private String name;\n"
+            "    private String language;\n\n"
+            "    public Developer(String name, String language) {\n"
+            "        this.name = name;\n"
+            "        this.language = language;\n"
+            "    }\n\n"
+            "    public void displayInfo() {\n"
+            "        System.out.printf(\"Developer: %s | Primary Tech: %s%n\", name, language);\n"
+            "    }\n"
+            "}\n"
+            "```\n\n"
+            "```bash\n"
+            "# Terminal compilation and execution commands:\n"
+            "# 1. Compile source into bytecode (.class file)\n"
+            "javac Main.java\n\n"
+            "# 2. Run the bytecode on the Java Virtual Machine (JVM)\n"
+            "java Main\n"
+            "```"
+        )
     }
 }
 
@@ -283,30 +449,65 @@ def find_developer_response(query: str) -> dict[str, str] | None:
     """Detect developer and programming queries, returning curated codebases and doc links."""
     q_lower = query.lower()
 
-    # 1. Python CRUD operations
+    # Java programming code / syntax
+    if "java" in q_lower.split() and any(w in q_lower for w in ["code", "example", "syntax", "class", "main", "compile", "javac", "oop", "program"]):
+        return DEV_TEMPLATES["java_basics"]
+
+    # 1. Django commands & setup
+    if "django" in q_lower and any(w in q_lower for w in [
+        "start", "run", "command", "server", "cli", "project", "app", "manage.py",
+        "terminal", "setup", "create", "how to start", "how to run"
+    ]):
+        return DEV_TEMPLATES["django_cli"]
+
+    # 2. Flask setup & API
+    if "flask" in q_lower and any(w in q_lower for w in [
+        "start", "run", "command", "server", "code", "app", "terminal", "setup", "api"
+    ]):
+        return DEV_TEMPLATES["flask_cli"]
+
+    # 3. Docker commands
+    if "docker" in q_lower and any(w in q_lower for w in [
+        "build", "run", "command", "container", "image", "terminal", "dockerfile", "start", "stop", "compose"
+    ]):
+        return DEV_TEMPLATES["docker_cli"]
+
+    # 4. Git workflow & commands
+    if any(k in q_lower for k in ["git commit", "git push", "git pull", "git status", "git clone", "git branch", "git command", "git workflow"]) or (
+        "git" in q_lower.split() and any(w in q_lower for w in ["command", "terminal", "commit", "push", "pull", "clone", "branch", "repo"])
+    ):
+        return DEV_TEMPLATES["git_cli"]
+
+    # 5. Node.js / Vite / NPM
+    if any(k in q_lower for k in ["vite", "npm create", "npm run dev", "npm install", "vite dev"]) or (
+        "npm" in q_lower and any(w in q_lower for w in ["command", "start", "run", "dev", "build"])
+    ):
+        return DEV_TEMPLATES["node_vite_cli"]
+
+    # 6. Python CRUD operations
     if ("crud" in q_lower or ("create" in q_lower and "read" in q_lower and "delete" in q_lower)) and "fastapi" in q_lower:
         return DEV_TEMPLATES["fastapi_crud"]
     if "crud" in q_lower or ("create" in q_lower and "read" in q_lower and "update" in q_lower and "delete" in q_lower):
         return DEV_TEMPLATES["python_crud"]
 
-    # 2. FastAPI
+    # 7. FastAPI
     if "fastapi" in q_lower and any(w in q_lower for w in ["code", "example", "endpoint", "api", "route", "crud"]):
         return DEV_TEMPLATES["fastapi_crud"]
 
-    # 3. PyTorch training / model
+    # 8. PyTorch training / model
     if "pytorch" in q_lower and any(w in q_lower for w in ["training", "train", "loop", "model", "loss", "optimizer", "code", "example"]):
         return DEV_TEMPLATES["pytorch_training"]
 
-    # 4. File I/O & JSON
+    # 9. File I/O & JSON
     if any(w in q_lower for w in ["file", "json", "read", "write"]) and any(w in q_lower for w in ["python", "code", "how to read", "how to write"]):
         if "file" in q_lower or "json" in q_lower:
             return DEV_TEMPLATES["python_file_io"]
 
-    # 5. React hooks & State
+    # 10. React hooks & State
     if "react" in q_lower and any(w in q_lower for w in ["state", "usestate", "useeffect", "hook", "fetch", "api", "code"]):
         return DEV_TEMPLATES["react_state_api"]
 
-    # 6. Binary Search
+    # 11. Binary Search
     if "binary search" in q_lower:
         return DEV_TEMPLATES["binary_search"]
 

@@ -150,6 +150,7 @@ export default function App() {
                   <span className={`grounding-badge ${item.source}`}>
                     {item.source === 'rag_grounded' && '⚡ Knowledge Base'}
                     {item.source === 'developer_code' && '💻 Developer Code'}
+                    {item.source === 'recipe_guide' && '🍲 Culinary Guide'}
                     {item.source === 'online_learned' && '🌐 Auto-Learned (Online)'}
                     {item.source === 'user_taught' && '🌱 User Taught'}
                     {item.source === 'needs_teaching' && '💡 Needs Teaching'}
