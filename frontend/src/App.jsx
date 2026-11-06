@@ -152,6 +152,7 @@ export default function App() {
                     {item.source === 'developer_code' && '💻 Developer Code'}
                     {item.source === 'recipe_guide' && '🍲 Culinary Guide'}
                     {item.source === 'online_learned' && '🌐 Auto-Learned (Online)'}
+                    {item.source === 'online_cached' && '🗃 Cached Reference'}
                     {item.source === 'user_taught' && '🌱 User Taught'}
                     {item.source === 'needs_teaching' && '💡 Needs Teaching'}
                     {item.source === 'generator' && '🧠 Neural Generator'}

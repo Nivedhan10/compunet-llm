@@ -124,7 +124,6 @@ def clean_topic_query(query: str) -> str:
         r"^(?:where is\s+|where are\s+|where was\s+)",
         r"^(?:how does\s+|how do\s+|how to\s+|how\s+)",
         r"^(?:make|cook|prepare|bake|brew)\s+",
-        r"^(?:the\s+|a\s+|an\s+)(?![A-Z])",
     ]
 
     changed = True
@@ -135,6 +134,12 @@ def clean_topic_query(query: str) -> str:
             if m:
                 cleaned = cleaned[m.end():].strip("?.! \t\r\n")
                 changed = True
+        article = re.match(r"^(?:the|a|an)\s+", cleaned, re.IGNORECASE)
+        # Preserve a title-cased article that is part of an entity name, while
+        # stripping conversational lowercase articles such as "about the telescope".
+        if article and not re.match(r"^(?:The|A|An)\s+[A-Z]", cleaned):
+            cleaned = cleaned[article.end():].strip("?.! \t\r\n")
+            changed = True
 
     trailing_fluff = [
         r"\s+(?:generally\s+)?in\s+terminal\??$",

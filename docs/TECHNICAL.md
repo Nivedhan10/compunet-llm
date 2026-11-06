@@ -1,102 +1,185 @@
-# TinyTalk technical documentation
+# TinyTalk technical guide
 
-## Goal and scope
+## 1. Project goal and design plan
 
-TinyTalk demonstrates the path from raw examples to a trained text generator and a small chat UI. It follows the assessment constraints: Python and PyTorch, a custom tokenizer, a Transformer implemented in this repository, and random initialization. It does not call a hosted AI service or load pretrained model weights.
+The assessment asks for a language model built from scratch, a training workflow, and a chat application that uses the trained model. TinyTalk implements that as a small decoder-only character Transformer plus a separate retrieval layer and a local web application.
 
-The scale is deliberately educational. The corpus contains original short explanations about language models and the implementation itself. It supports a reproducible demonstration, not broad factual question answering.
+The design separates two jobs:
 
-## Architecture and folder structure
+1. **Learn text patterns:** train the local Transformer from random initialization on the project dialogue corpus. It learns next-character prediction.
+2. **Supply reference information:** use BM25 to find saved knowledge, and optionally search a limited set of reference sources for information that is not in the small corpus.
+
+Retrieval does not retrain the Transformer. This is an intentional choice: the model weights remain reproducible and no pretrained LLM or hosted AI API is involved. Updating a retrieval index is safer and more direct than fine-tuning a tiny model on each question or unverified web result.
+
+## 2. System architecture
 
 ```text
-data/dialogues.jsonl       Original user/assistant examples
-scripts/prepare_data.py    Cleans, splits, and serializes the corpus
-tinytalk/tokenizer.py      Character to integer vocabulary
-tinytalk/model.py          Attention, Transformer block, decoder model
-tinytalk/train.py          Batches, optimization, loss reporting, checkpoint
-tinytalk/generate.py       Checkpoint loading and sampling
-tinytalk/api.py            FastAPI request validation and inference endpoint
-frontend/src/              React chat interface and styling
-artifacts/                 Generated dataset splits, vocabulary, and weights
+                         OFFLINE PREPARATION / TRAINING
+data/dialogues.jsonl -> prepare_data.py -> train/validation/test + vocab
+                                               |
+                                               v
+                                train.py -> artifacts/tinytalk.pt
+                                           artifacts/vocab.json
+
+                              ONLINE CHAT REQUEST
+React UI + localStorage -> FastAPI validation/context handling
+                                  |
+                                  +-> user-taught facts or developer templates
+                                  +-> live reference lookup (allowlisted URLs)
+                                  |       +-> persist successful result with source
+                                  +-> local BM25 knowledge retrieval
+                                  `-> trained Transformer generation -> fallback
 ```
 
-At runtime React sends the latest message and recent turns to FastAPI. The API formats them as `User:` and `Assistant:` lines, encodes the prompt, and asks the local PyTorch model to continue it. It returns the generated assistant text. The browser owns the history in local storage; the API is stateless.
+The API keeps no server-side conversation session. React sends recent turns on each request and keeps the transcript in browser `localStorage`. The API validates roles and message sizes, constructs a role-labelled prompt, and fits the prompt to the configured context size.
 
-## Dataset preparation and tokenizer
+## 3. Repository structure
 
-Each JSON Lines record has a `user` string and an `assistant` string. `prepare_data.py` collapses repeated whitespace, drops empty records, shuffles with a fixed seed (42), and reserves held-out sets for validation and testing (10% validation, 10% test, 80% training). The training, validation, and test dialogues are serialized with role labels. The vocabulary is built only from training text.
+| Path | Responsibility |
+| --- | --- |
+| `data/dialogues.jsonl` | Original training dialogue records (`user`, `assistant`) |
+| `data/knowledge.jsonl` | Curated/imported/user-taught and saved online Q&A records |
+| `scripts/prepare_data.py` | Whitespace cleanup, deterministic split, text serialization, tokenizer creation |
+| `scripts/import_knowledge.py` | Optional import from URL, JSONL, text, or Markdown |
+| `tinytalk/tokenizer.py` | Character vocabulary, encode/decode, JSON persistence |
+| `tinytalk/model.py` | Causal attention, Transformer blocks, model, autoregressive sampler |
+| `tinytalk/train.py` | Random window batches, optimizer, loss estimates, checkpoint and config output |
+| `tinytalk/generate.py` | Load trained model/tokenizer and generate a continuation |
+| `tinytalk/rag.py` | BM25 index, fuzzy token matching, knowledge persistence |
+| `tinytalk/online_search.py` | Entity/context heuristics, reference search, URL allowlist, source excerpts |
+| `tinytalk/dev_assistant.py` | Fixed programming templates linked to documentation |
+| `tinytalk/api.py` | FastAPI health, chat, and RAG endpoints; response routing |
+| `frontend/src/` | React interface, local history, loading and status states |
+| `tests/test_tinytalk.py` | Unit and API/inference behavior tests |
+| `artifacts/` | Prepared splits, vocabulary, model checkpoint, and training metrics |
 
-`CharTokenizer` maps each distinct training character to an integer. A reserved `<unk>` ID handles characters that appear only in validation, test, or an inference prompt. Decoding joins the corresponding characters. Character tokenization is easy to inspect and has no word segmentation problem, though sequences are longer than with subword tokenization.
+## 4. Dataset preparation and tokenizer
 
-## Transformer and self-attention
+Each non-empty line in `data/dialogues.jsonl` is a JSON object with a `user` and an `assistant` string. `scripts/prepare_data.py` normalizes repeated whitespace, rejects empty sides, and shuffles records with seed 42. At 120 records, it assigns 12 to validation, 12 to test, and the remaining 96 to training.
 
-The input IDs index a learned token embedding. A learned position embedding is added at each sequence location, since attention needs order information. The resulting vectors pass through two decoder blocks by default.
+Each dialogue is serialized with role prefixes:
 
-Within a block, a linear layer projects each vector into query, key, and value vectors. Attention scores are scaled query-key dot products:
-$$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}} + M\right)V$$
-A causal mask ($M$) hides later positions; softmax turns remaining scores into weights that combine the value vectors. Multiple heads perform this calculation in separate feature subspaces. PyTorch's `scaled_dot_product_attention` performs the operation with the causal mask enabled.
+```text
+User: What is attention?
+Assistant: Attention lets a model weigh information from earlier positions.
+```
 
-Each block uses Pre-LayerNorm: it normalizes before attention and feed-forward, adding outputs directly to the residual stream:
-$$x = x + \text{Attention}(\text{LayerNorm}(x))$$
-$$x = x + \text{FeedForward}(\text{LayerNorm}(x))$$
-The feed-forward network is a two-layer GELU network. After the final normalization, a linear output head produces one score per vocabulary character. The input and output embedding weights are tied. All weights are initialized randomly by this code.
+The tokenizer is built from **training text only**. `CharTokenizer` maps each distinct character to an integer and reserves ID zero for `<unk>`. An unseen character encodes to `<unk>`; decoding skips that marker. The current vocabulary has 60 IDs. A character vocabulary is transparent and easy to implement, but consumes more sequence positions than a subword tokenizer.
 
-## Training and generation
+## 5. Transformer implementation
 
-Training samples fixed-length windows from the training character stream. The input is the window and the target is shifted by one character, teaching next-character prediction. Cross entropy compares each position's vocabulary scores with its correct next character. AdamW updates parameters using gradients from backpropagation; gradient clipping limits unusually large updates.
+The current default has 64 model dimensions, four attention heads, two decoder blocks, dropout 0.1, a 128-character context, and about 112K parameters. Its weights are initialized by TinyTalk's own initialization routine; the checkpoint is produced by the project training script.
 
-At intervals, the script estimates average loss on random training and held-out validation windows. Periodic evaluation is strictly restricted to training and validation splits to prevent data leakage. At the end of training, the model is evaluated once on the untouched held-out test split. Note that reported evaluation losses are sampled window estimates (averaging 20 batches of 16 windows, totaling 320 sampled windows per split) rather than an exhaustive single-pass metric. The checkpoint stores the model state and architecture configuration; `vocab.json` stores the matching tokenizer. Both are needed to use the checkpoint. Generation repeatedly predicts the next character, samples from top-k candidates after temperature scaling, and appends the result. The API stops the visible answer when a new `User:` turn begins.
+### Embeddings and positions
 
-## API and frontend
+For token ID (t_i) at position (i), the model adds a learned token embedding and learned position embedding:
 
-`GET /health` reports whether both the checkpoint and vocabulary files exist and can be loaded successfully for inference. `POST /chat` accepts a message plus conversation history. To maintain optimal generation quality within the 128-token context window, the API dynamically budgets history to prioritize the active question. If an individual prompt exceeds the context window, the message body is trimmed while preserving the structural `User: ` and `\nAssistant:` role delimiters. The request schema limits text sizes and validates roles. CORS permits the local Vite development origin. If training has not produced a checkpoint, `/chat` returns HTTP 503 with the training command.
+\[
+x_i = E_{token}(t_i) + E_{position}(i)
+\]
 
-React renders the transcript, loading state, error banner, and quick suggested question chips. It submits on Enter and inserts a newline on Shift+Enter. It keeps recent conversation state in `localStorage`, so refreshing the page preserves the browser's transcript. No messages are sent anywhere except the local FastAPI service.
+Position embeddings let attention distinguish ordering. The model rejects inputs longer than its context window; the API trims the active question body while preserving `User: ` and `\nAssistant:` markers.
 
-## Automated Verification
+### Causal multi-head self-attention
 
-An automated test suite under `tests/test_tinytalk.py` contains 14 unit and integration tests verifying:
-1. Tokenizer encode/decode roundtrip invertibility.
-2. Tokenizer `<unk>` fallback for out-of-vocabulary characters.
-3. Tokenizer vocabulary JSON serialization and loading.
-4. Transformer forward output tensor shapes and cross-entropy loss computation.
-5. Parameter tying between language head and token embeddings.
-6. Strict causality property (future tokens cannot alter past token logits).
-7. Autoregressive generation output sequence dimensions.
-8. Generation loop execution with optional `eos_id`.
-9. Zero-dependency RAG exact match retrieval from curated dialogues.
-10. RAG rejection and graceful generative fallback for out-of-domain queries.
-11. FastAPI `/health` endpoint verifying model and vocabulary loadability.
-12. FastAPI `/chat` input schema validation and error rejection.
-13. End-to-end `/chat` inference and response generation.
-14. Safe prompt truncation for oversized inputs while preserving `User: ` and `\nAssistant:` role delimiters.
+Each block projects hidden states into query, key, and value tensors and splits the feature dimension into heads. For a head, the mathematical operation is:
 
-## RAG Knowledge Grounding & Ingestion
+\[
+\operatorname{Attention}(Q,K,V)=\operatorname{softmax}\left(\frac{QK^T}{\sqrt{d_k}}+M\right)V
+\]
 
-Character-level generative models trained from scratch on small corpora can suffer from autoregressive spelling drift when sampling under high temperatures. To provide production-grade reliability and factual accuracy, TinyTalk features a zero-dependency Retrieval-Augmented Generation (RAG) architecture (`tinytalk/rag.py`):
-- **BM25 Content-Word Matching:** Indexes both question intent and answer concepts, computing inverse document frequencies (IDF) over non-stopword tokens.
-- **Typo Tolerance:** Employs fuzzy matching via standard library `difflib.SequenceMatcher` on words of 5+ characters to match misspelled user inputs (e.g., "embeding" -> "embedding").
-- **Dynamic Routing:** High-confidence matches (score $\ge 2.5$) return verified factual responses with an active grounding badge in the UI. Unmatched or novel queries gracefully fall back to the from-scratch causal Transformer with low-temperature sampling and repetition penalties.
-- **External Web & Document Ingestion:** The `scripts/import_knowledge.py` utility can ingest any web URL, Wikipedia article, or local Markdown/text file, extracting clean paragraphs into `data/knowledge.jsonl` which the RAG system indexes automatically.
+Here, (d_k) is the per-head key size. The causal mask (M) prevents a position from attending to future characters. The implementation calls PyTorch's `scaled_dot_product_attention(..., is_causal=True)`; the model architecture and training remain project code, while PyTorch supplies the optimized attention kernel.
 
-## Install and run
+### Transformer block and output head
 
-Use Python 3.10 or newer. Install PyTorch 2.0 or newer (required for `F.scaled_dot_product_attention`) using the official PyTorch selector, followed by `python -m pip install -r requirements.txt`. Then run:
+Each block uses Pre-LayerNorm residual sublayers:
+
+\[
+x' = x + \operatorname{Attention}(\operatorname{LayerNorm}(x))
+\]
+\[
+x_{next} = x' + \operatorname{FFN}(\operatorname{LayerNorm}(x'))
+\]
+
+The feed-forward network expands to four times the hidden width, applies GELU, then projects back. A final normalization and linear head produce one logit per vocabulary character. The output-head weight is the same parameter object as the input token embedding weight (weight tying), reducing parameters and connecting input/output character representations.
+
+## 6. Training, evaluation, and generation
+
+The data is encoded as one character stream per split. `get_batch` samples random starting positions and forms input/target windows offset by one character. For each batch, the model predicts the next character at every position and uses cross-entropy loss. AdamW updates parameters; gradients are clipped to norm 1.0. The configured random seed is 1337.
+
+Periodic loss estimates sample only training and validation windows. The test split is checked for sufficient length before training and evaluated only once at the end. The current final estimates in `artifacts/training_config.json` are:
+
+| Split | Sampled loss |
+| --- | ---: |
+| Train | 1.1713 |
+| Validation | 1.8336 |
+| Test | 1.6998 |
+
+Each estimate averages 20 batches of 16 windows (320 windows). This is a sampled estimate, not a complete pass over all possible windows. With only 12 dialogues in each held-out split, it is a useful training diagnostic but weak evidence of generalization.
+
+Generation starts from a prompt and repeatedly samples the next character. Temperature adjusts sampling sharpness; top-k restricts candidates; repetition penalty discourages repeated characters/tokens. Generation can stop at a configured EOS token or a conversation delimiter. In the API, the default fallback limit is 64 new characters, configurable per request up to 160. The model may still produce ungrammatical or irrelevant text because it is small and trained on little data.
+
+## 7. Retrieval and online knowledge
+
+### Local BM25 RAG
+
+`TinyRAG` loads `data/dialogues.jsonl` and `data/knowledge.jsonl`. It tokenizes words with regular expressions and builds a BM25-style lexical index. User-question tokens receive extra weight. Stopwords and generic terms are reduced or excluded, and longer unknown words can use a high-threshold `difflib` fuzzy match. Retrieval also applies subject-overlap and prompt-coverage checks to reduce unrelated matches.
+
+BM25 ranks lexical relevance; it does not perform semantic reasoning or fact verification. A high retrieval score means that words overlap, not that the answer is true. The API returns local matches with a `rag_grounded` source label.
+
+### Dynamic reference lookup
+
+For queries not handled by user-taught facts or developer templates, the API tries online retrieval before saved online knowledge and the local RAG/model fallback. This ordering lets a successful live lookup refresh information that may change. Search routes include Wikipedia summaries/search, Stack Exchange for programming questions, Hugging Face for model queries, and DuckDuckGo as a discovery service. DuckDuckGo results are only accepted when their destination is HTTPS on an allowlisted reference domain defined in `online_search.py`.
+
+The entity resolver is a lightweight rule-based aid, not a general named-entity recognition model. For follow-up pronouns it considers prior user turns, not assistant-generated prose, to reduce accidental subject switching. Search responses present retrieved text and a source URL; they do not make categorical life/retirement claims from keyword matching.
+
+Successful online results are saved in `data/knowledge.jsonl` with a source marker and an explicit resolved subject in the record key. The cache can be reused when appropriate, but time-sensitive external matches are not served as current when live lookup fails. The file can grow over time and should be inspected/curated.
+
+### Manual knowledge import
+
+`scripts/import_knowledge.py --url ...` extracts heading/paragraph Q&A records; `--file ...` accepts JSONL, Markdown, or text. By default it appends to `data/knowledge.jsonl`. The importer currently does **not** enforce the online search allowlist, validate truth, or refresh stale content. Only import trusted sources, and review the generated records before using them. Use `--output` to target another JSONL file, but note that the default RAG index only reads its configured data files.
+
+### Why retrieval instead of automatic fine-tuning?
+
+An answer fetched from a website is not automatically correct, and a user message is not necessarily trustworthy. Re-training on either without review risks contaminating the corpus and changing model behavior unpredictably. TinyTalk therefore “learns” new reference records for retrieval, but does not update model weights during chat. A fully automated continual-training system would need source review, data provenance, deduplication, evaluation gates, rollback, and privacy controls; that is outside this educational assessment.
+
+## 8. API and frontend integration
+
+FastAPI defines:
+
+- `GET /health`: checks checkpoint and vocabulary files and attempts to load the model bundle.
+- `GET /rag/stats`: reports indexed document count and available data files.
+- `POST /rag/reload`: reloads JSONL records into the in-memory BM25 index.
+- `POST /chat`: validates a message, optional recent history, and generation limit; routes to user-taught facts/developer templates, online retrieval, local RAG, then model generation.
+
+Pydantic limits messages to 2,000 characters, history to 20 entries, and generation to 1–160 characters (default 64). The prompt formatter preserves the active user/assistant role markers and allocates remaining context to recent history. The API allows the local Vite origins in CORS settings.
+
+React sends the message and recent transcript, displays source/status labels, and keeps chat history in `localStorage`. It does not make any external AI calls; only the backend performs optional HTTP reference retrieval.
+
+## 9. Tests and verification
+
+Run tests from the repository root:
 
 ```powershell
-python scripts/prepare_data.py
-python -m tinytalk.train --steps 3500 --block-size 128
-uvicorn tinytalk.api:app --reload
+python tests/test_tinytalk.py -v
 ```
 
-In another terminal, run `cd frontend`, `npm install`, and `npm run dev`. Open the local Vite address. CUDA is selected when available; otherwise CPU is used (CPU training takes approximately 3-4 minutes).
+The suite contains 25 tests covering tokenizer roundtrip/unknown IDs/serialization; model forward shapes, loss, weight tying, causality, generation, and EOS; BM25 relevance and rejection; query cleaning, source allowlisting, user-history entity resolution, source routing; developer templates; and API schema, health, prompt truncation, default model fallback, and chat inference. External search route tests mock source results, so they do not prove that third-party sites are reachable or that live content is correct.
 
-To see a text-only sample, use `python -m tinytalk.generate --prompt "User: What is attention?\nAssistant:"`. Run training with fewer steps for a quick pipeline run. Increase steps or enrich the original dataset for more stable demonstrations. Since training data is tiny, a lower validation loss only indicates better character prediction on this particular held-out sample; it does not establish general language ability.
+## 10. Setup and operation
 
-## Discussion points
+1. Install Python 3.10+ and a platform-appropriate PyTorch 2.0+ build.
+2. Install API dependencies with `python -m pip install -r requirements.txt`.
+3. Run `python scripts/prepare_data.py` if prepared artifacts are absent or the source corpus changed.
+4. Run `python -m tinytalk.train --steps 3500 --block-size 128` if the checkpoint is absent or retraining is desired.
+5. Start the API with `uvicorn tinytalk.api:app --reload`.
+6. In another terminal, run `cd frontend`, `npm install`, `npm run dev` and open the Vite URL.
+7. Verify the API at `http://localhost:8000/health` and run the test command above.
 
-- **Why causal attention?** At generation time, the model has only the prefix, so it must not use future characters during training either.
-- **Why report validation loss?** It gives a held-out comparison that can reveal memorization, though this corpus is small.
-- **Why character-level?** It keeps vocabulary construction transparent and avoids unknown words, trading that simplicity for longer sequences and slower generation.
-- **Why role labels?** They give the next-character objective examples of user turns followed by assistant turns, which the prompt can imitate.
-- **What would improve it?** More varied original dialogues, a subword tokenizer, larger training budget, stronger evaluation, and carefully tuned decoding. Those changes still would not make a small from-scratch model equivalent to a pretrained assistant.
+For a direct model sample, run `python -m tinytalk.generate --prompt "User: What is attention?\nAssistant:" --max-new-tokens 100`.
+
+## 11. Assessment boundaries and improvement opportunities
+
+TinyTalk implements a Transformer language model from scratch in the educational sense: the architecture, initialization, objective, optimization loop, and sampling path are repository code using PyTorch primitives. The PyTorch scaled attention kernel is an optimized library operation. The project does not implement a foundation-scale LLM, and retrieval is an application layer around the trained model.
+
+High-value future improvements include a larger and more diverse licensed corpus, repeated-seed evaluation, a larger held-out test set, an explicit benchmark for retrieval relevance/factuality, better general entity extraction without adding person-name maps, cache expiry and provenance review, query-level source diagnostics, and deployment/security hardening. None of these should be described as complete until implemented and tested.

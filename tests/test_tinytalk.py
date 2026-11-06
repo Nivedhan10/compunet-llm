@@ -2,6 +2,7 @@
 import sys
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -123,6 +124,9 @@ class TestAPIEndpoints(unittest.TestCase):
         from pydantic import ValidationError
         from tinytalk.api import ChatRequest, ChatMessage
 
+        # The browser can omit this field and still reach the trained model on a novel query.
+        self.assertEqual(ChatRequest(message="Hello").max_new_tokens, 64)
+
         # Invalid role should fail Pydantic validation
         with self.assertRaises(ValidationError):
             ChatRequest(message="Hello", history=[ChatMessage(role="hacker", content="test")])
@@ -137,6 +141,42 @@ class TestAPIEndpoints(unittest.TestCase):
         ))
         self.assertIsInstance(response.reply, str)
         self.assertGreater(len(response.reply), 0)
+
+    def test_chat_uses_transformer_by_default_after_retrieval_miss(self):
+        from tinytalk.api import chat, ChatRequest
+
+        class EmptyRAG:
+            def retrieve(self, *args, **kwargs):
+                return []
+
+        class FakeModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.anchor = torch.nn.Parameter(torch.zeros(1))
+                self.config = {"block_size": 128}
+                self.requested_limit = None
+
+            def generate(self, token_ids, **kwargs):
+                self.requested_limit = kwargs["max_new_tokens"]
+                addition = torch.tensor([[2]], device=token_ids.device)
+                return torch.cat((token_ids, addition), dim=1)
+
+        class FakeTokenizer:
+            def encode(self, text):
+                return [1]
+
+            def decode(self, ids):
+                return "Generated fallback answer."
+
+        model = FakeModel()
+        with patch("tinytalk.api.rag_instance", return_value=EmptyRAG()), \
+             patch("tinytalk.api.find_developer_response", return_value=None), \
+             patch("tinytalk.api.fetch_online_knowledge", return_value=(None, None, None)), \
+             patch("tinytalk.api.model_bundle", return_value=(model, FakeTokenizer())):
+            response = chat(ChatRequest(message="What is quuxification?"))
+
+        self.assertEqual(response.source, "generator")
+        self.assertEqual(model.requested_limit, 64)
 
     def test_chat_long_message_handling(self):
         from tinytalk.api import chat, ChatRequest, format_prompt
@@ -202,23 +242,43 @@ class TestDevAssistantAndSearch(unittest.TestCase):
         self.assertEqual(resolve_tech_entity("java"), "Java (programming language)")
         self.assertEqual(resolve_tech_entity("java prommaing language"), "Java (programming language)")
 
+    def test_reference_url_allowlist(self):
+        from tinytalk.online_search import is_allowed_reference_url
+        self.assertTrue(is_allowed_reference_url("https://en.wikipedia.org/wiki/Transformer"))
+        self.assertFalse(is_allowed_reference_url("http://en.wikipedia.org/wiki/Transformer"))
+        self.assertFalse(is_allowed_reference_url("https://wikipedia.org.example.com/fake"))
+
+    def test_followup_entity_uses_user_history_not_assistant_text(self):
+        from tinytalk.online_search import detect_intent_and_entity
+        history = [
+            {"role": "user", "content": "Who is Virat Kohli?"},
+            {"role": "assistant", "content": "I can also discuss Cristiano Ronaldo."},
+        ]
+        entity, intent, _ = detect_intent_and_entity("Did he retire from T20?", history)
+        self.assertEqual(entity, "Virat Kohli")
+        self.assertEqual(intent, "retirement_status")
+
     def test_dynamic_internet_retrieval_biryani(self):
         from tinytalk.online_search import fetch_online_knowledge
-        title, extract, url = fetch_online_knowledge("how to make biryani? give me steps proeprly?")
+        with patch("tinytalk.online_search.search_web_ddg", return_value=(None, None, None)), \
+             patch("tinytalk.online_search.search_wikipedia", return_value=("Biryani", "A rice dish with spices.", "https://en.wikipedia.org/wiki/Biryani")):
+            title, extract, url = fetch_online_knowledge("how to make biryani? give me steps proeprly?")
         self.assertIsNotNone(extract)
         self.assertTrue(len(extract) > 20)
         self.assertIsNotNone(url)
 
     def test_dynamic_internet_retrieval_animal(self):
         from tinytalk.online_search import fetch_online_knowledge
-        title, extract, url = fetch_online_knowledge("what is a red kangaroo?")
+        with patch("tinytalk.online_search.search_wikipedia", return_value=("Red kangaroo", "The red kangaroo is a large kangaroo native to Australia.", "https://en.wikipedia.org/wiki/Red_kangaroo")):
+            title, extract, url = fetch_online_knowledge("what is a red kangaroo?")
         self.assertIsNotNone(extract)
         self.assertIn("kangaroo", extract.lower())
         self.assertIn("wikipedia.org", url)
 
     def test_dynamic_internet_retrieval_stackoverflow(self):
         from tinytalk.online_search import fetch_online_knowledge
-        title, extract, url = fetch_online_knowledge("how to catch ZeroDivisionError in python?")
+        with patch("tinytalk.online_search.search_stack_overflow", return_value=("ZeroDivisionError", "Catch it with try/except.", "https://stackoverflow.com/questions/1/example")):
+            title, extract, url = fetch_online_knowledge("how to catch ZeroDivisionError in python?")
         self.assertIsNotNone(extract)
         self.assertIn("stackoverflow.com", url)
 

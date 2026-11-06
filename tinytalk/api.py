@@ -33,7 +33,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     history: list[ChatMessage] = Field(default_factory=list, max_length=20)
-    max_new_tokens: int | None = Field(default=None, ge=1, le=160)
+    max_new_tokens: int | None = Field(default=64, ge=1, le=160)
 
 
 class ChatResponse(BaseModel):
@@ -170,6 +170,8 @@ def chat(request: ChatRequest) -> ChatResponse:
     # from silently winning over newer evidence.
     title, answer_text, source_url = fetch_online_knowledge(msg_clean, request.history)
     if answer_text:
+        if source_url and source_url not in answer_text:
+            answer_text = f"{answer_text.rstrip()}\n\n[Source: {source_url}]"
         # Cache only with the resolved subject in its key: never store a pronoun-only
         # question like "did he retire?" where it could match another conversation.
         cache_question = f"{target_entity}: {msg_clean}" if target_entity else msg_clean
@@ -208,30 +210,31 @@ def chat(request: ChatRequest) -> ChatResponse:
                 confidence=round(top.confidence, 2)
             )
 
-    # 5. Generative fallback or safe educational guidance
-    # If the caller requested an explicit token limit (e.g. automated tests), run the neural generator
-    if request.max_new_tokens:
-        try:
-            model, tokenizer = model_bundle()
-            block_size = model.config.get("block_size", 128)
-            prompt = format_prompt(request.message, request.history, block_size)
-            device = next(model.parameters()).device
-            ids = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long, device=device)
-            stop_seqs = [tokenizer.encode("\nUser:"), tokenizer.encode("\n\nUser:")]
-            with torch.inference_mode():
-                output = model.generate(
-                    ids,
-                    max_new_tokens=request.max_new_tokens,
-                    temperature=0.25,
-                    top_k=2,
-                    repetition_penalty=1.15,
-                    stop_sequences=stop_seqs
-                )[0].tolist()
-            reply = tokenizer.decode(output[len(ids[0]):]).split("\nUser:", 1)[0].split("\n\nUser:", 1)[0].strip()
-            if reply:
-                return ChatResponse(reply=reply, source="generator", confidence=None)
-        except Exception:
-            pass
+    # 7. Run the trained from-scratch model for novel questions. The UI does not
+    # need to set max_new_tokens; 64 is the default, with a request-level override.
+    try:
+        model, tokenizer = model_bundle()
+        block_size = model.config.get("block_size", 128)
+        prompt = format_prompt(request.message, request.history, block_size)
+        device = next(model.parameters()).device
+        ids = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long, device=device)
+        stop_seqs = [tokenizer.encode("\nUser:"), tokenizer.encode("\n\nUser:")]
+        with torch.inference_mode():
+            output = model.generate(
+                ids,
+                max_new_tokens=request.max_new_tokens or 64,
+                temperature=0.25,
+                top_k=2,
+                repetition_penalty=1.15,
+                stop_sequences=stop_seqs
+            )[0].tolist()
+        reply = tokenizer.decode(output[len(ids[0]):]).split("\nUser:", 1)[0].split("\n\nUser:", 1)[0].strip()
+        if reply:
+            return ChatResponse(reply=reply, source="generator", confidence=None)
+    except Exception:
+        # Keep the API usable if the checkpoint is unavailable or inference fails;
+        # /health communicates model readiness separately.
+        pass
 
     # For end users, provide a polite learning prompt instead of garbled character hallucinations
     fallback = (
